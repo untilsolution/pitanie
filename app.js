@@ -65,17 +65,17 @@ function itemHtml(d, m, i, it) {
   const status = cls === 'part'
     ? `<small class="st">съел ${got} из ${it.a} ${it.u}, осталось ${it.a - got} ${it.u}</small>`
     : `<small>${it.a} ${it.u} · ${whole(it.k)} ккал · Б ${num(it.p)} Ж ${num(it.f)} У ${num(it.c)}</small>`;
-  const step = it.a >= 100 ? 10 : 5;
+  const step = it.u === 'кусок' ? 0.5 : it.a >= 100 ? 10 : 5;
   const edit = open === id ? `<div class="edit">
       <div class="step">
         <button type="button" data-act="minus" data-id="${id}" data-step="${step}" aria-label="Меньше">−</button>
-        <input type="number" inputmode="numeric" min="0" max="${it.a}" value="${got}" data-act="input" data-id="${id}" aria-label="Съедено, ${it.u}">
+        <input type="number" inputmode="numeric" min="0" max="${it.a}" step="${step}" value="${got}" data-act="input" data-id="${id}" aria-label="Съедено, ${it.u}">
         <button type="button" data-act="plus" data-id="${id}" data-step="${step}" aria-label="Больше">+</button>
         <span>из ${it.a} ${it.u}</span>
       </div>
       <div class="chips">
         <button type="button" data-act="set" data-id="${id}" data-val="0">Не ел</button>
-        <button type="button" data-act="set" data-id="${id}" data-val="${Math.round(it.a / 2)}">Половина</button>
+        <button type="button" data-act="set" data-id="${id}" data-val="${it.u === 'кусок' ? it.a / 2 : Math.round(it.a / 2)}">Половина</button>
         <button type="button" data-act="set" data-id="${id}" data-val="${it.a}">Всё</button>
       </div>
     </div>` : '';
@@ -143,7 +143,8 @@ function findItem(id) {
 }
 function setEaten(id, value) {
   const it = findItem(id);
-  const v = Math.max(0, Math.min(it.a, Math.round(Number(value) || 0)));
+  const n = Number(value) || 0;
+  const v = Math.max(0, Math.min(it.a, it.u === 'кусок' ? Math.round(n * 2) / 2 : Math.round(n)));
   if (v) state.eaten[id] = v; else delete state.eaten[id];
   save();
 }
