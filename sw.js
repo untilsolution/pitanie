@@ -1,5 +1,5 @@
 // Network first, so a new plan shows up at once; the cache is only for offline use.
-const CACHE = 'pitanie-v2';
+const CACHE = 'pitanie-v3';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', e => {

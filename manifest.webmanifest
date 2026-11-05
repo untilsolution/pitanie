@@ -7,7 +7,7 @@
   "background_color": "#14181a",
   "theme_color": "#14181a",
   "icons": [
-    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "plate-icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "plate-icon-512.png", "sizes": "512x512", "type": "image/png" }
   ]
 }
