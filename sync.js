@@ -1,19 +1,26 @@
 'use strict';
 // Связь между телефонами через публичный репозиторий pitanie-data.
-// Телефон с ключом записывает отметки, телефон без ключа только смотрит.
+// Основной телефон записывает отметки, телефон с ролью «покупки» отмечает только покупки,
+// телефон без ключа только смотрит. Покупки лежат в своём файле, чтобы не затирать еду.
 // Ключ хранится только на этом телефоне и никогда не попадает в отправляемые данные.
 window.Sync = (() => {
   const REPO = 'https://api.github.com/repos/untilsolution/pitanie-data/contents/';
   const PATH = `days/${encodeURIComponent(PLAN.id)}.json`;
-  const TOKEN = 'pitanie:token', LAST = `pitanie:sent:${PLAN.id}`;
-  const VIEW_EVERY = 90 * 1000; // без ключа GitHub даёт 60 запросов в час
-  const me = { mode: 'local', at: null, error: '', sha: null, busy: false, timer: 0 };
+  const SHOP_PATH = `shop/${encodeURIComponent(PLAN.id)}.json`;
+  const TOKEN = 'pitanie:token', ROLE = 'pitanie:role', LAST = `pitanie:sent:${PLAN.id}`, QUEUE = `pitanie:shopq:${PLAN.id}`;
+  // Без ключа GitHub даёт 60 запросов в час, а за раз нужно два
+  const EVERY_ANON = 150 * 1000, EVERY_KEY = 60 * 1000;
+  const me = { mode: 'local', at: null, error: '', sha: null, busy: false, timer: 0, shopBusy: false };
 
   const token = () => { try { return localStorage.getItem(TOKEN) || ''; } catch (e) { return ''; } };
   const remember = (key, value) => {
     try { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); } catch (e) { /* только на этот раз */ }
   };
   const sent = () => { try { return localStorage.getItem(LAST) || ''; } catch (e) { return ''; } };
+  const role = () => { try { return localStorage.getItem(ROLE) || 'main'; } catch (e) { return 'main'; } };
+  let queue = {}; // покупки, ещё не дошедшие до GitHub: имя -> куплено или нет
+  try { queue = JSON.parse(localStorage.getItem(QUEUE)) || {}; } catch (e) { /* очередь только на этот раз */ }
+  const keepQueue = () => remember(QUEUE, Object.keys(queue).length ? JSON.stringify(queue) : '');
   const clock = iso => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
   function encode(text) {
@@ -34,14 +41,14 @@ window.Sync = (() => {
 
   function body() {
     return {
-      plan: PLAN.id, eaten: state.eaten, shop: state.shop, swaps: state.swaps, extras: state.extras,
+      plan: PLAN.id, eaten: state.eaten, swaps: state.swaps, extras: state.extras,
       yield: shared.yield, vessels: shared.vessels,
       days: PLAN.days.map((day, d) => ({ title: day.title, text: marked(d) ? dayText(d) : null })),
     };
   }
 
-  async function pull() {
-    const res = await fetch(`${REPO}${PATH}?t=${Date.now()}`, { headers: headers(), cache: 'no-store' });
+  async function pull(path = PATH) {
+    const res = await fetch(`${REPO}${path}?t=${Date.now()}`, { headers: headers(), cache: 'no-store' });
     if (res.status === 404) return null;
     if (res.status === 401) throw new Error('Ключ не подошёл');
     if (!res.ok) throw new Error('GitHub не ответил');
@@ -52,7 +59,7 @@ window.Sync = (() => {
   const plain = v => v && typeof v === 'object' && !Array.isArray(v);
   function apply(data) {
     if (data.plan !== PLAN.id) return;
-    for (const k of ['eaten', 'shop', 'swaps', 'extras']) if (plain(data[k])) state[k] = data[k];
+    for (const k of ['eaten', 'swaps', 'extras']) if (plain(data[k])) state[k] = data[k];
     if (plain(data.yield)) shared.yield = data.yield;
     if (Array.isArray(data.vessels)) {
       shared.vessels = data.vessels.map(v => ({ n: String(v.n), w: Number(v.w) || 0, ...(/^data:image\/jpeg;base64,[\w+/=]+$/.test(v.photo || '') ? { photo: v.photo } : {}) }));
@@ -63,6 +70,46 @@ window.Sync = (() => {
   function redraw() {
     const typing = document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
     if (!sheet && !typing) render();
+  }
+
+  function mergeShop(remote) {
+    const next = { ...remote };
+    for (const [name, on] of Object.entries(queue)) { if (on) next[name] = true; else delete next[name]; }
+    const changed = JSON.stringify(next) !== JSON.stringify(state.shop);
+    state.shop = next;
+    return changed;
+  }
+
+  // Берём свежий файл и накладываем только свои отметки, поэтому два телефона не мешают друг другу
+  async function flushShop(force) {
+    if (!token() || me.shopBusy || (!force && !Object.keys(queue).length)) return;
+    me.shopBusy = true;
+    const sending = { ...queue };
+    try {
+      for (let i = 0; ; i++) {
+        const got = await pull(SHOP_PATH);
+        mergeShop(got?.data?.shop ?? {});
+        const content = encode(JSON.stringify({ plan: PLAN.id, shop: state.shop, updated: new Date().toISOString() }));
+        const res = await fetch(REPO + SHOP_PATH, { method: 'PUT', headers: headers({ 'Content-Type': 'application/json' }), body: JSON.stringify({ message: 'Покупки', content, ...(got ? { sha: got.sha } : {}) }) });
+        if ((res.status === 409 || res.status === 422) && i < 4) continue;
+        if (res.status === 401 || res.status === 403) throw new Error('Ключ не подошёл');
+        if (res.status === 404) throw new Error('Нет репозитория pitanie-data или доступа к нему');
+        if (!res.ok) throw new Error('GitHub не принял данные');
+        break;
+      }
+      for (const [name, on] of Object.entries(sending)) if (queue[name] === on) delete queue[name];
+      keepQueue();
+      me.error = '';
+    } catch (e) {
+      me.error = e.name === 'TypeError' ? 'Нет связи, отправлю позже' : e.message;
+    }
+    me.shopBusy = false;
+    if (!me.error && Object.keys(queue).length) flushShop();
+  }
+
+  async function refreshShop() {
+    const got = await pull(SHOP_PATH);
+    if (got && mergeShop(got.data?.shop ?? {})) { save(); redraw(); }
   }
 
   async function push(quick) {
@@ -104,6 +151,7 @@ window.Sync = (() => {
   }
   function buttonText() {
     if (me.mode === 'viewer') return 'Просмотр';
+    if (me.mode === 'shopper') return me.error ? `Не отправлено: ${me.error}` : 'Покупки отмечаются';
     if (me.mode === 'local') return 'Синхронизация выключена';
     return me.error ? `Не отправлено: ${me.error}` : me.at ? `Отправлено в ${clock(me.at)}` : 'Синхронизация включена';
   }
@@ -111,9 +159,11 @@ window.Sync = (() => {
   async function refresh() {
     try {
       const got = await pull();
-      if (!got) return;
-      me.sha = got.sha;
-      apply(got.data);
+      if (got) {
+        me.sha = got.sha;
+        apply(got.data);
+      }
+      await refreshShop();
       me.error = '';
       redraw();
     } catch (e) {
@@ -128,7 +178,25 @@ window.Sync = (() => {
     return PLAN.days.findIndex(day => day.title.toLowerCase().includes(word));
   }
 
+  function poll() {
+    if (me.poll) clearInterval(me.poll);
+    me.poll = setInterval(() => {
+      if (document.hidden) return;
+      if (me.mode === 'writer') refreshShop().catch(() => {}); else refresh();
+    }, token() ? EVERY_KEY : EVERY_ANON);
+  }
+
   async function start() {
+    if (token() && role() === 'shop') {
+      me.mode = 'shopper';
+      await refresh();
+      const today = todayIndex();
+      if (today >= 0) state.day = today;
+      redraw();
+      await flushShop(true);
+      poll();
+      return;
+    }
     if (token()) {
       me.mode = 'writer';
       try {
@@ -142,30 +210,49 @@ window.Sync = (() => {
         me.error = e.message;
       }
       if (!me.error) await push();
+      if (!me.error) {
+        try {
+          const list = await pull(SHOP_PATH);
+          if (!list) { for (const name of Object.keys(state.shop)) queue[name] = true; keepQueue(); }
+          await flushShop(!list);
+          await refreshShop();
+        } catch (e) { me.error = e.message; }
+      }
+      poll();
       if (state.view === 'plan') label();
       return;
     }
     try {
       const got = await pull();
-      if (!got) return; // репозитория ещё нет: всё работает как раньше
+      if (!got) return; // данных ещё нет: всё работает как раньше
       me.mode = 'viewer';
       me.sha = got.sha;
       apply(got.data);
+      await refreshShop();
       const today = todayIndex();
       if (today >= 0) state.day = today;
       redraw();
-      if (!me.poll) me.poll = setInterval(() => { if (!document.hidden) refresh(); }, VIEW_EVERY);
+      poll();
     } catch (e) { /* без связи телефон показывает то, что знает */ }
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { if (me.mode === 'writer') { clearTimeout(me.timer); push(true); } } else if (me.mode === 'viewer') refresh();
-    else if (me.mode === 'writer') push();
+    if (document.hidden) { if (me.mode === 'writer') { clearTimeout(me.timer); push(true); } return; }
+    if (me.mode === 'viewer' || me.mode === 'shopper') refresh();
+    if (me.mode === 'writer') { push(); refreshShop().catch(() => {}); }
+    flushShop();
   });
-  addEventListener('online', () => { if (me.mode === 'writer') push(); });
+  addEventListener('online', () => { if (me.mode === 'writer') push(); flushShop(); });
 
   return {
-    get viewer() { return me.mode === 'viewer'; },
+    get viewer() { return me.mode === 'viewer' || me.mode === 'shopper'; },
+    get canShop() { return me.mode !== 'viewer'; },
+    shop(name, on) {
+      if (me.mode !== 'writer' && me.mode !== 'shopper') return;
+      queue[name] = on;
+      keepQueue();
+      flushShop();
+    },
     get mode() { return me.mode; },
     changed() {
       if (me.mode !== 'writer') return;
@@ -173,9 +260,10 @@ window.Sync = (() => {
       me.timer = setTimeout(() => push(), 1500);
     },
     buttonText,
-    bar: () => (me.mode === 'viewer' ? `<p class="syncbar">Просмотр${me.error ? `, ${esc(me.error.toLowerCase())}` : me.at ? `, обновлено в ${clock(me.at)}` : ''}</p>` : ''),
-    async setToken(value) {
+    bar: () => (me.mode === 'viewer' || me.mode === 'shopper' ? `<p class="syncbar">${me.mode === 'shopper' ? 'Отмечаются только покупки' : 'Просмотр'}${me.error ? `, ${esc(me.error.toLowerCase())}` : me.at ? `, обновлено в ${clock(me.at)}` : ''}</p>` : ''),
+    async setToken(value, asRole) {
       remember(TOKEN, value.trim());
+      remember(ROLE, asRole);
       me.mode = 'local';
       me.error = '';
       me.sha = null;
@@ -183,6 +271,7 @@ window.Sync = (() => {
       const error = me.error;
       if (error) { // ключ оставляем только если запись прошла
         remember(TOKEN, '');
+        remember(ROLE, '');
         me.mode = 'local';
         me.error = '';
         await start();
@@ -191,6 +280,7 @@ window.Sync = (() => {
     },
     forget() {
       remember(TOKEN, '');
+      remember(ROLE, '');
       location.reload();
     },
     start,

@@ -248,10 +248,11 @@ function renderSheet() {
   document.body.classList.add('locked');
   let title, body;
   if (sheet.mode === 'sync') {
-    const on = Sync.mode === 'writer';
-    s.innerHTML = sheetFrame('Синхронизация', `<p class="sub">${esc(Sync.mode === 'viewer' ? 'Этот телефон только смотрит: здесь видно то, что отмечено на основном телефоне.' : on ? Sync.buttonText() : 'Вставь ключ GitHub, и отметки с этого телефона станут видны по ссылке всем.')}</p>
+    const on = Sync.mode === 'writer' || Sync.mode === 'shopper';
+    s.innerHTML = sheetFrame('Синхронизация', `<p class="sub">${esc(Sync.mode === 'viewer' ? 'Этот телефон только смотрит. Чтобы отмечать покупки, вставь ключ и выбери «Только покупки».' : on ? Sync.buttonText() : 'Вставь ключ GitHub и выбери, какой это телефон.')}</p>
       ${on ? '<button type="button" class="btn ghost small" data-act="forgetkey">Убрать ключ с этого телефона</button>' : `<label class="field col"><span>Ключ GitHub</span><input type="password" id="syncKey" data-act="calcinput" autocomplete="off" aria-label="Ключ GitHub"></label>
-      <button type="button" class="btn small" data-act="savekey">Сохранить ключ</button>`}`);
+      <button type="button" class="btn small" data-act="savekey" data-role="main">Основной телефон: отмечаю еду</button>
+      <button type="button" class="btn ghost small" data-act="savekey" data-role="shop">Только покупки</button>`}`);
     return;
   }
   if (sheet.mode === 'swap') {
@@ -437,13 +438,16 @@ document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (!el || ['input', 'cookedinput', 'yield', 'calcinput', 'sheetsearch', 'xamount', 'vphoto'].includes(el.dataset.act)) return;
   const { act, id } = el.dataset;
-  if (window.Sync && Sync.viewer && !VIEWER_OK.has(act)) { toast('Отмечать можно только на основном телефоне'); return; }
+  if (window.Sync && Sync.viewer && !VIEWER_OK.has(act) && !(act === 'shop' && Sync.canShop)) {
+    toast(act === 'shop' ? 'Чтобы отмечать покупки, нужен ключ: Рацион, кнопка внизу' : 'Отмечать можно только на основном телефоне');
+    return;
+  }
   if (act === 'sync') { sheet = { mode: 'sync' }; renderSheet(); return; }
   if (act === 'forgetkey') { Sync.forget(); return; }
   if (act === 'savekey') {
     const key = $('syncKey').value.trim();
     if (!key) { toast('Вставь ключ'); return; }
-    Sync.setToken(key).then(error => {
+    Sync.setToken(key, el.dataset.role).then(error => {
       if (error) { toast(error); return; }
       closeSheet();
       render();
@@ -500,8 +504,10 @@ document.addEventListener('click', e => {
     setEaten(id, el.dataset.val);
   } else if (act === 'shop') {
     const n = el.dataset.name;
-    if (state.shop[n]) delete state.shop[n]; else state.shop[n] = true;
+    const bought = !state.shop[n];
+    if (bought) state.shop[n] = true; else delete state.shop[n];
     save();
+    if (window.Sync) Sync.shop(n, bought);
   } else if (act === 'calc') {
     const card = el.closest('.cook'), val = f => Number(card.querySelector(`[data-f=${f}]`).value) || 0;
     const net = val('scale') - Number(card.querySelector('.vp.on').dataset.w);
