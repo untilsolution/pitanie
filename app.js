@@ -29,6 +29,21 @@ function save() {
 const state = Object.assign({ eaten: {}, shop: {}, day: 0, view: 'plan' }, load());
 let open = null;
 
+// Cooked weights and dishes outlive any single plan, so they have their own key.
+const SHARED = 'pitanie:shared';
+let sharedMemory = {};
+function loadShared() {
+  try { return JSON.parse(localStorage.getItem(SHARED)) || {}; } catch (e) { return sharedMemory; }
+}
+const shared = Object.assign({ yield: {}, vessels: [] }, loadShared());
+function saveShared() {
+  sharedMemory = shared;
+  try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
+}
+const COOK = /^(Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты)/;
+const cookables = () => [...new Set(PLAN.days.flatMap(d => d.meals.flatMap(m => m.items.map(it => it.n))).filter(n => COOK.test(n)))];
+const cookedOf = (it, raw) => (shared.yield[it.n] ? Math.round(raw * shared.yield[it.n] / 100) : null);
+
 const $ = id => document.getElementById(id);
 const num = x => (Math.round(x * 10) / 10).toString().replace('.', ',');
 const whole = x => Math.round(x).toString();
@@ -66,13 +81,17 @@ function itemHtml(d, m, i, it) {
     ? `<small class="st">съел ${got} из ${it.a} ${it.u}, осталось ${it.a - got} ${it.u}</small>`
     : `<small>${it.a} ${it.u} · ${whole(it.k)} ккал · Б ${num(it.p)} Ж ${num(it.f)} У ${num(it.c)}</small>`;
   const step = it.u === 'кусок' ? 0.5 : it.a >= 100 ? 10 : 5;
+  const ready = cookedOf(it, cls === 'part' ? it.a - got : it.a);
+  const readyLine = ready === null ? '' : `<small class="ck">${cls === 'part' ? 'осталось' : 'порция'} ${ready} г готового</small>`;
+  const readyEdit = ready === null ? '' : `<div class="ckrow"><span>Готового съел</span>
+        <input type="number" inputmode="numeric" min="0" value="${cookedOf(it, got)}" data-act="cookedinput" data-id="${id}" aria-label="Съедено готового, г"><span>г</span></div>`;
   const edit = open === id ? `<div class="edit">
       <div class="step">
         <button type="button" data-act="minus" data-id="${id}" data-step="${step}" aria-label="Меньше">−</button>
         <input type="number" inputmode="numeric" min="0" max="${it.a}" step="${step}" value="${got}" data-act="input" data-id="${id}" aria-label="Съедено, ${it.u}">
         <button type="button" data-act="plus" data-id="${id}" data-step="${step}" aria-label="Больше">+</button>
         <span>из ${it.a} ${it.u}</span>
-      </div>
+      </div>${readyEdit}
       <div class="chips">
         <button type="button" data-act="set" data-id="${id}" data-val="0">Не ел</button>
         <button type="button" data-act="set" data-id="${id}" data-val="${it.u === 'кусок' ? it.a / 2 : Math.round(it.a / 2)}">Половина</button>
@@ -82,7 +101,7 @@ function itemHtml(d, m, i, it) {
   return `<div class="item ${cls}">
     <div class="row">
       <button type="button" class="tick" data-act="tick" data-id="${id}" aria-label="${esc(it.n)}: отметить" aria-pressed="${cls === 'full'}"><i>${cls === 'full' ? '✓' : ''}</i></button>
-      <button type="button" class="info" data-act="open" data-id="${id}" aria-expanded="${open === id}"><b>${esc(it.n)}</b>${status}</button>
+      <button type="button" class="info" data-act="open" data-id="${id}" aria-expanded="${open === id}"><b>${esc(it.n)}</b>${status}${readyLine}</button>
     </div>${edit}</div>`;
 }
 
@@ -128,13 +147,45 @@ function renderShop() {
     <section class="card">${rows}</section>`;
 }
 
+function renderGrams() {
+  const vesselOptions = '<option value="0">Без посуды</option>' + shared.vessels.map(v =>
+    `<option value="${v.w}">${esc(v.n)}, ${v.w} г</option>`).join('');
+  const cards = cookables().map(n => {
+    const y = shared.yield[n];
+    return `<section class="card cook" data-name="${esc(n)}">
+      <h2>${esc(n)}</h2>
+      <label class="field"><span>Из 100 г сырого выходит</span>
+        <input type="number" inputmode="numeric" min="1" value="${y || ''}" placeholder="—" data-act="yield" data-name="${esc(n)}" aria-label="${esc(n)}: вес готового из 100 г сырого"><span>г</span></label>
+      <details><summary>Посчитать по весам</summary>
+        <label class="field"><span>Сырой вес всего</span><input type="number" inputmode="numeric" min="1" data-f="raw" data-act="calcinput" aria-label="Сырой вес, г"><span>г</span></label>
+        <label class="field"><span>На весах вместе с посудой</span><input type="number" inputmode="numeric" min="1" data-f="scale" data-act="calcinput" aria-label="Вес на весах, г"><span>г</span></label>
+        <label class="field col"><span>Посуда</span><select data-f="vessel" data-act="calcinput" aria-label="Посуда">${vesselOptions}</select></label>
+        <button type="button" class="btn small" data-act="calc">Посчитать</button>
+      </details>
+      ${y ? `<button type="button" class="btn ghost small" data-act="clearyield" data-name="${esc(n)}">Стереть, сварю новые</button>` : ''}
+    </section>`;
+  }).join('');
+  const vessels = shared.vessels.map((v, i) => `<div class="vessel"><span>${esc(v.n)}</span><b>${v.w} г</b>
+      <button type="button" data-act="delvessel" data-i="${i}" aria-label="Удалить: ${esc(v.n)}">Удалить</button></div>`).join('');
+  $('main').innerHTML = `<h1>Граммовки</h1><p class="sub">Впиши, сколько выходит готового, и рацион сам покажет порции.</p>
+    ${cards}
+    <h1>Посуда</h1><p class="sub">Вес кастрюль и тарелок хранится всегда, при смене плана не пропадает.</p>
+    <section class="card cook">
+      ${vessels || '<p class="sub" style="margin:0 0 10px">Пока пусто.</p>'}
+      <label class="field col"><span>Название</span><input type="text" id="vName" data-act="calcinput" placeholder="Большая кастрюля" aria-label="Название посуды"></label>
+      <label class="field"><span>Вес</span><input type="number" inputmode="numeric" min="1" id="vWeight" data-act="calcinput" aria-label="Вес посуды, г"><span>г</span></label>
+      <button type="button" class="btn small" data-act="addvessel">Добавить посуду</button>
+    </section>`;
+}
+
 function render() {
   $('days').hidden = state.view !== 'plan';
   $('days').innerHTML = PLAN.days.map((day, d) =>
     `<button type="button" class="day" role="tab" data-act="day" data-d="${d}" aria-selected="${d === state.day}">${esc(day.tab)}</button>`).join('');
   $('tabPlan').setAttribute('aria-current', state.view === 'plan' ? 'page' : 'false');
+  $('tabGrams').setAttribute('aria-current', state.view === 'grams' ? 'page' : 'false');
   $('tabShop').setAttribute('aria-current', state.view === 'shop' ? 'page' : 'false');
-  state.view === 'plan' ? renderPlan() : renderShop();
+  if (state.view === 'plan') renderPlan(); else if (state.view === 'grams') renderGrams(); else renderShop();
 }
 
 function findItem(id) {
@@ -186,7 +237,7 @@ async function copyDay() {
 
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
-  if (!el || el.dataset.act === 'input') return;
+  if (!el || ['input', 'cookedinput', 'yield', 'calcinput'].includes(el.dataset.act)) return;
   const { act, id } = el.dataset;
   if (act === 'day') { state.day = +el.dataset.d; open = null; save(); render(); window.scrollTo(0, 0); return; }
   if (act === 'tick') {
@@ -203,6 +254,25 @@ document.addEventListener('click', e => {
     const n = el.dataset.name;
     if (state.shop[n]) delete state.shop[n]; else state.shop[n] = true;
     save();
+  } else if (act === 'calc') {
+    const card = el.closest('.cook'), val = f => Number(card.querySelector(`[data-f=${f}]`).value) || 0;
+    const net = val('scale') - val('vessel');
+    if (val('raw') <= 0 || net <= 0) { toast('Проверь сырой вес и вес на весах'); return; }
+    shared.yield[card.dataset.name] = Math.round(net / val('raw') * 100);
+    saveShared();
+    toast(`Готового всего ${net} г, из 100 г сырого ${shared.yield[card.dataset.name]} г`);
+  } else if (act === 'clearyield') {
+    delete shared.yield[el.dataset.name];
+    saveShared();
+  } else if (act === 'addvessel') {
+    const n = $('vName').value.trim(), w = Math.round(Number($('vWeight').value) || 0);
+    if (!n || w <= 0) { toast('Впиши название и вес'); return; }
+    shared.vessels.push({ n, w });
+    saveShared();
+  } else if (act === 'delvessel') {
+    if (!confirm('Удалить эту посуду?')) return;
+    shared.vessels.splice(+el.dataset.i, 1);
+    saveShared();
   } else if (act === 'copy') {
     copyDay();
     return;
@@ -215,9 +285,22 @@ document.addEventListener('click', e => {
   render();
 });
 document.addEventListener('change', e => {
-  if (e.target.dataset.act === 'input') { setEaten(e.target.dataset.id, e.target.value); render(); }
+  const t = e.target, act = t.dataset.act;
+  if (act === 'input') { setEaten(t.dataset.id, t.value); render(); }
+  if (act === 'cookedinput') {
+    const it = findItem(t.dataset.id);
+    setEaten(t.dataset.id, Number(t.value) * 100 / shared.yield[it.n]);
+    render();
+  }
+  if (act === 'yield') {
+    const v = Math.round(Number(t.value) || 0);
+    if (v > 0) shared.yield[t.dataset.name] = v; else delete shared.yield[t.dataset.name];
+    saveShared();
+    render();
+  }
 });
 $('tabPlan').addEventListener('click', () => { state.view = 'plan'; save(); render(); window.scrollTo(0, 0); });
+$('tabGrams').addEventListener('click', () => { state.view = 'grams'; save(); render(); window.scrollTo(0, 0); });
 $('tabShop').addEventListener('click', () => { state.view = 'shop'; save(); render(); window.scrollTo(0, 0); });
 
 if (state.day >= PLAN.days.length) state.day = 0;
