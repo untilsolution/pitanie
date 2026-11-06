@@ -140,14 +140,13 @@ function renderPlan() {
   }).join('');
   const viewer = window.Sync && Sync.viewer;
   $('main').innerHTML = `${window.Sync ? Sync.bar() : ''}<h1>${esc(day.title)}</h1><p class="sub">${esc(day.note || '')}</p>
-    ${viewer ? nextMealHtml(d) : ''}${summary(d)}${meals}
+    ${viewer ? nextMealHtml(d) : window.Sync ? trainTop() : ''}${summary(d)}${meals}
     ${extrasHtml(d)}
     <div class="actions">
       ${viewer ? '' : '<button type="button" class="btn" data-act="extra">Съел вне плана</button>'}
-      <button type="button" class="btn" data-act="copy">Скопировать итог дня</button>
       ${viewer ? '' : '<button type="button" class="btn ghost" data-act="reset">Сбросить отметки этого дня</button>'}
       <button type="button" class="btn ghost" data-act="sync">${esc(window.Sync ? Sync.buttonText() : 'Синхронизация')}</button>
-    </div><div id="copyBox"></div>`;
+    </div>`;
 }
 
 // For the person who serves the food: what is left in the next meal, in cooked grams.
@@ -378,7 +377,12 @@ function render() {
   $('tabPlan').setAttribute('aria-current', state.view === 'plan' ? 'page' : 'false');
   $('tabGrams').setAttribute('aria-current', state.view === 'grams' ? 'page' : 'false');
   $('tabShop').setAttribute('aria-current', state.view === 'shop' ? 'page' : 'false');
-  if (state.view === 'plan') renderPlan(); else if (state.view === 'grams') renderGrams(); else renderShop();
+  const viewer = !!(window.Sync && Sync.viewer);
+  $('tabTrain').hidden = viewer;
+  if (viewer && state.view === 'train') state.view = 'plan';
+  $('tabTrain').setAttribute('aria-current', state.view === 'train' ? 'page' : 'false');
+  if (state.view === 'train' && !window.Sync) state.view = 'plan';
+  if (state.view === 'plan') renderPlan(); else if (state.view === 'grams') renderGrams(); else if (state.view === 'train') renderTrain(); else renderShop();
 }
 
 function findItem(id) {
@@ -417,23 +421,9 @@ function dayText(d) {
   lines.push(`По плану: ${whole(plan.k)} ккал, Б ${whole(plan.p)}, Ж ${whole(plan.f)}, У ${whole(plan.c)}`);
   return lines.join('\n');
 }
-async function copyDay() {
-  const text = dayText(state.day);
-  try {
-    await navigator.clipboard.writeText(text);
-    toast('Итог дня скопирован');
-  } catch (e) {
-    $('copyBox').innerHTML = '<textarea class="copy" readonly aria-label="Итог дня"></textarea>';
-    const box = $('copyBox').firstChild;
-    box.value = text;
-    box.focus();
-    box.select();
-    toast('Выдели текст и скопируй');
-  }
-}
 
 // What a phone without a key may do: look around, nothing that changes the marks.
-const VIEWER_OK = new Set(['day', 'copy', 'sync', 'closesheet', 'savekey', 'pickv']);
+const VIEWER_OK = new Set(['day', 'sync', 'closesheet', 'savekey', 'pickv']);
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (!el || ['input', 'cookedinput', 'yield', 'calcinput', 'sheetsearch', 'xamount', 'vphoto'].includes(el.dataset.act)) return;
@@ -527,9 +517,6 @@ document.addEventListener('click', e => {
     if (!confirm('Удалить эту посуду?')) return;
     shared.vessels.splice(+el.dataset.i, 1);
     saveShared();
-  } else if (act === 'copy') {
-    copyDay();
-    return;
   } else if (act === 'reset') {
     if (!confirm('Сбросить все отметки этого дня?')) return;
     Object.keys(state.eaten).filter(k => k.startsWith(`d${state.day}m`)).forEach(k => delete state.eaten[k]);
@@ -572,6 +559,7 @@ document.addEventListener('change', e => {
 });
 $('tabPlan').addEventListener('click', () => { state.view = 'plan'; save(); render(); window.scrollTo(0, 0); });
 $('tabGrams').addEventListener('click', () => { state.view = 'grams'; save(); render(); window.scrollTo(0, 0); });
+$('tabTrain').addEventListener('click', () => { state.view = 'train'; save(); render(); window.scrollTo(0, 0); });
 $('tabShop').addEventListener('click', () => { state.view = 'shop'; save(); render(); window.scrollTo(0, 0); });
 
 if (state.day >= PLAN.days.length) state.day = 0;

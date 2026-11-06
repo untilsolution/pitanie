@@ -133,6 +133,24 @@ body.locked{overflow:hidden}
 .vp small{display:block;font-size:11px;line-height:1.25;overflow-wrap:anywhere}
 .webbtn{margin:0 0 8px}
 .webhead{margin:6px 0 2px}
+.wcard{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;margin-bottom:12px;flex-wrap:wrap}
+.wcard .step{margin:0}
+.wcard button[data-tr=wedit]{color:var(--muted);font-size:14px;min-height:40px}
+.wsave{min-height:44px;padding:0 16px;border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:600}
+.trhint{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;margin-bottom:12px;background:var(--accent-soft)}
+.trhint button{min-height:40px;font-weight:600;white-space:nowrap}
+.trnav{display:flex;gap:8px;margin-bottom:12px}
+.trnav .btn{flex:1;margin:0}
+.trex{padding:12px 14px;margin-bottom:12px}
+.trex h2{margin:0 0 8px;font-size:17px}
+.trlines{display:flex;flex-wrap:wrap;gap:6px}
+.trlines span{background:var(--accent-soft);border-radius:8px;padding:4px 10px;font-weight:600;font-variant-numeric:tabular-nums}
+.trnote{display:block;margin-top:6px;color:var(--muted);font-size:13px}
+.trwarn{font-size:14px;margin:8px 0}
+.trwarm{margin-top:10px}
+.trwarm small{color:var(--muted);font-size:13px}
+.trwarm ol{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:4px 0 0;padding:0}
+.trwarm li{border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:14px;font-variant-numeric:tabular-nums}
 .syncbar { margin: 0 0 6px; font-size: 13px; opacity: .7; }
 .next .nextrow { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; }
 .next .nextrow b { white-space: nowrap; }
@@ -143,6 +161,7 @@ body.locked{overflow:hidden}
 <main class="wrap" id="main"></main>
 <nav><div>
   <button id="tabPlan" type="button">Рацион</button>
+  <button id="tabTrain" type="button">Тренировка</button>
   <button id="tabGrams" type="button">Граммовки</button>
   <button id="tabShop" type="button">Покупки</button>
 </div></nav>
@@ -150,7 +169,9 @@ body.locked{overflow:hidden}
 <div class="toast" id="toast" role="status"></div>
 <script src="plan.js"></script>
 <script src="products.js"></script>
+<script src="training.js"></script>
 <script src="app.js"></script>
+<script src="train.js"></script>
 <script src="sync.js"></script>
 </body>
 </html>

@@ -18,6 +18,10 @@ window.Sync = (() => {
   };
   const sent = () => { try { return localStorage.getItem(LAST) || ''; } catch (e) { return ''; } };
   const role = () => { try { return localStorage.getItem(ROLE) || 'main'; } catch (e) { return 'main'; } };
+  const JOURNAL = 'journal.json', JKEY = 'pitanie:journal', JDIRTY = 'pitanie:journal:dirty';
+  let journal = { weights: {}, workouts: {} };
+  try { journal = { ...journal, ...JSON.parse(localStorage.getItem(JKEY)) }; } catch (e) { /* журнал только на этот раз */ }
+  const dirty = () => { try { return !!localStorage.getItem(JDIRTY); } catch (e) { return false; } };
   let queue = {}; // покупки, ещё не дошедшие до GitHub: имя -> куплено или нет
   try { queue = JSON.parse(localStorage.getItem(QUEUE)) || {}; } catch (e) { /* очередь только на этот раз */ }
   const keepQueue = () => remember(QUEUE, Object.keys(queue).length ? JSON.stringify(queue) : '');
@@ -105,6 +109,36 @@ window.Sync = (() => {
     }
     me.shopBusy = false;
     if (!me.error && Object.keys(queue).length) flushShop();
+  }
+
+  // Журнал пишет только основной телефон: вес и выполненные тренировки
+  async function flushJournal() {
+    if (me.mode !== 'writer' || me.journalBusy || !dirty()) return;
+    me.journalBusy = true;
+    try {
+      for (let i = 0; ; i++) {
+        const got = await pull(JOURNAL);
+        const content = encode(JSON.stringify({ ...journal, updated: new Date().toISOString() }));
+        const res = await fetch(REPO + JOURNAL, { method: 'PUT', headers: headers({ 'Content-Type': 'application/json' }), body: JSON.stringify({ message: 'Журнал', content, ...(got ? { sha: got.sha } : {}) }) });
+        if ((res.status === 409 || res.status === 422) && i < 3) continue;
+        if (!res.ok) throw new Error('GitHub не принял журнал');
+        break;
+      }
+      remember(JDIRTY, '');
+      me.error = '';
+    } catch (e) {
+      me.error = e.name === 'TypeError' ? 'Нет связи, отправлю позже' : e.message;
+    }
+    me.journalBusy = false;
+  }
+
+  async function loadJournal() {
+    if (dirty()) return;
+    const got = await pull(JOURNAL);
+    if (!got) return;
+    journal = { weights: got.data.weights || {}, workouts: got.data.workouts || {} };
+    remember(JKEY, JSON.stringify(journal));
+    redraw();
   }
 
   async function refreshShop() {
@@ -216,6 +250,8 @@ window.Sync = (() => {
           if (!list) { for (const name of Object.keys(state.shop)) queue[name] = true; keepQueue(); }
           await flushShop(!list);
           await refreshShop();
+          await loadJournal();
+          await flushJournal();
         } catch (e) { me.error = e.message; }
       }
       poll();
@@ -239,14 +275,20 @@ window.Sync = (() => {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { if (me.mode === 'writer') { clearTimeout(me.timer); push(true); } return; }
     if (me.mode === 'viewer' || me.mode === 'shopper') refresh();
-    if (me.mode === 'writer') { push(); refreshShop().catch(() => {}); }
+    if (me.mode === 'writer') { push(); refreshShop().catch(() => {}); flushJournal(); }
     flushShop();
   });
-  addEventListener('online', () => { if (me.mode === 'writer') push(); flushShop(); });
+  addEventListener('online', () => { if (me.mode === 'writer') push(); flushShop(); flushJournal(); });
 
   return {
     get viewer() { return me.mode === 'viewer' || me.mode === 'shopper'; },
     get canShop() { return me.mode !== 'viewer'; },
+    get journal() { return journal; },
+    saveJournal() {
+      remember(JKEY, JSON.stringify(journal));
+      remember(JDIRTY, '1');
+      flushJournal();
+    },
     shop(name, on) {
       if (me.mode !== 'writer' && me.mode !== 'shopper') return;
       queue[name] = on;
