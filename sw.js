@@ -1,9 +1,9 @@
 // Network first, so a new plan shows up at once; the cache is only for offline use.
-const CACHE = 'pitanie-v4';
+const CACHE = 'pitanie-v5';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
+  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
     fetch(e.request, { cache: 'no-cache' })
       .then(res => {

@@ -25,6 +25,7 @@ function load() {
 function save() {
   memory = state;
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* the page still works for this visit */ }
+  if (window.Sync) Sync.changed();
 }
 const state = Object.assign({ eaten: {}, shop: {}, day: 0, view: 'plan', swaps: {}, extras: {} }, load());
 let open = null;
@@ -39,6 +40,7 @@ const shared = Object.assign({ yield: {}, vessels: [] }, loadShared());
 function saveShared() {
   sharedMemory = shared;
   try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
+  if (window.Sync) Sync.changed();
 }
 const COOK = /^(Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты)/;
 const DRY = /^(Макароны|Рис|Гречка|Крупа|Овсян)/;
@@ -136,14 +138,31 @@ function renderPlan() {
       ${list.map((it, i) => itemHtml(d, m, i, it)).join('')}
     </section>`;
   }).join('');
-  $('main').innerHTML = `<h1>${esc(day.title)}</h1><p class="sub">${esc(day.note || '')}</p>
-    ${summary(d)}${meals}
+  const viewer = window.Sync && Sync.viewer;
+  $('main').innerHTML = `${window.Sync ? Sync.bar() : ''}<h1>${esc(day.title)}</h1><p class="sub">${esc(day.note || '')}</p>
+    ${viewer ? nextMealHtml(d) : ''}${summary(d)}${meals}
     ${extrasHtml(d)}
     <div class="actions">
-      <button type="button" class="btn" data-act="extra">Съел вне плана</button>
+      ${viewer ? '' : '<button type="button" class="btn" data-act="extra">Съел вне плана</button>'}
       <button type="button" class="btn" data-act="copy">Скопировать итог дня</button>
-      <button type="button" class="btn ghost" data-act="reset">Сбросить отметки этого дня</button>
+      ${viewer ? '' : '<button type="button" class="btn ghost" data-act="reset">Сбросить отметки этого дня</button>'}
+      <button type="button" class="btn ghost" data-act="sync">${esc(window.Sync ? Sync.buttonText() : 'Синхронизация')}</button>
     </div><div id="copyBox"></div>`;
+}
+
+// For the person who serves the food: what is left in the next meal, in cooked grams.
+function nextMealHtml(d) {
+  const day = PLAN.days[d];
+  for (let m = 0; m < day.meals.length; m++) {
+    const rows = day.meals[m].items.map((x, i) => {
+      const it = itemAt(d, m, i), left = it.a - eatenOf(idOf(d, m, i), it);
+      if (left <= 0) return '';
+      const ready = cookedOf(it, left);
+      return `<div class="nextrow"><span>${esc(it.n)}</span><b>${ready === null ? `${num(left)} ${esc(it.u)}` : `${ready} г готового`}</b></div>`;
+    }).join('');
+    if (rows) return `<section class="card next"><div class="mealhead"><h2>Положить: ${esc(day.meals[m].name)}</h2></div>${rows}</section>`;
+  }
+  return '<section class="card next"><div class="mealhead"><h2>На этот день всё съедено</h2></div></section>';
 }
 
 function extrasHtml(d) {
@@ -228,6 +247,13 @@ function renderSheet() {
   s.hidden = false;
   document.body.classList.add('locked');
   let title, body;
+  if (sheet.mode === 'sync') {
+    const on = Sync.mode === 'writer';
+    s.innerHTML = sheetFrame('Синхронизация', `<p class="sub">${esc(Sync.mode === 'viewer' ? 'Этот телефон только смотрит: здесь видно то, что отмечено на основном телефоне.' : on ? Sync.buttonText() : 'Вставь ключ GitHub, и отметки с этого телефона станут видны по ссылке всем.')}</p>
+      ${on ? '<button type="button" class="btn ghost small" data-act="forgetkey">Убрать ключ с этого телефона</button>' : `<label class="field col"><span>Ключ GitHub</span><input type="password" id="syncKey" data-act="calcinput" autocomplete="off" aria-label="Ключ GitHub"></label>
+      <button type="button" class="btn small" data-act="savekey">Сохранить ключ</button>`}`);
+    return;
+  }
   if (sheet.mode === 'swap') {
     const it = findItem(sheet.id);
     title = `Заменить: ${it.n}`;
@@ -308,7 +334,7 @@ function renderShop() {
       <span class="tick"><i>${done ? '✓' : ''}</i></span><span>${esc(r.name)}</span><span class="amt">${r.fmt(r.g)}</span></button>`;
   }).join('');
   const n = PLAN.days.length;
-  $('main').innerHTML = `<h1>Покупки</h1><p class="sub">На весь план, дней: ${n}. Орехи и мюсли не считаем.</p>
+  $('main').innerHTML = `${window.Sync ? Sync.bar() : ''}<h1>Покупки</h1><p class="sub">На весь план, дней: ${n}. Орехи и мюсли не считаем.</p>
     <section class="card">${rows}</section>`;
 }
 
@@ -405,10 +431,26 @@ async function copyDay() {
   }
 }
 
+// What a phone without a key may do: look around, nothing that changes the marks.
+const VIEWER_OK = new Set(['day', 'copy', 'sync', 'closesheet', 'savekey', 'pickv']);
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (!el || ['input', 'cookedinput', 'yield', 'calcinput', 'sheetsearch', 'xamount', 'vphoto'].includes(el.dataset.act)) return;
   const { act, id } = el.dataset;
+  if (window.Sync && Sync.viewer && !VIEWER_OK.has(act)) { toast('Отмечать можно только на основном телефоне'); return; }
+  if (act === 'sync') { sheet = { mode: 'sync' }; renderSheet(); return; }
+  if (act === 'forgetkey') { Sync.forget(); return; }
+  if (act === 'savekey') {
+    const key = $('syncKey').value.trim();
+    if (!key) { toast('Вставь ключ'); return; }
+    Sync.setToken(key).then(error => {
+      if (error) { toast(error); return; }
+      closeSheet();
+      render();
+      toast('Синхронизация включена');
+    });
+    return;
+  }
   if (act === 'pickv') {
     el.closest('.vpick').querySelectorAll('.vp').forEach(b => b.classList.toggle('on', b === el));
     return;
@@ -497,6 +539,11 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target, act = t.dataset.act;
+  if (window.Sync && Sync.viewer && ['input', 'vphoto', 'cookedinput', 'yield'].includes(act)) {
+    toast('Менять можно только на основном телефоне');
+    render();
+    return;
+  }
   if (act === 'input') { setEaten(t.dataset.id, t.value); render(); }
   if (act === 'vphoto' && t.files[0]) {
     thumbnail(t.files[0]).then(url => {
