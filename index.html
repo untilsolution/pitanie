@@ -106,6 +106,31 @@ summary{min-height:44px;display:flex;align-items:center;color:var(--accent);font
 .vessel{display:flex;align-items:center;gap:10px;min-height:48px;border-bottom:1px solid var(--line);margin-bottom:10px}
 .vessel span{flex:1;min-width:0;overflow-wrap:anywhere}
 .vessel button{min-height:44px;color:var(--danger);font-size:14px}
+body.locked{overflow:hidden}
+.sheet{position:fixed;inset:0;z-index:8;background:rgba(0,0,0,.45);display:flex;align-items:flex-end}
+.sheetbox{width:100%;max-width:560px;margin:0 auto;height:86vh;height:86dvh;background:var(--bg);border-radius:20px 20px 0 0;display:flex;flex-direction:column}
+.sheethead{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.sheethead h2{font-size:17px;margin:0;min-width:0;overflow-wrap:anywhere}
+.sheethead button{min-height:44px;color:var(--accent);font-weight:600;flex:0 0 auto}
+.sheetbody{flex:1;overflow-y:auto;padding:12px 16px calc(16px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+.sheetbody h3{margin:4px 0 12px;font-size:17px}
+.search{width:100%;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--card);padding:0 12px;font-size:16px;margin-bottom:10px}
+.pick{display:block;width:100%;text-align:left;padding:10px 0;min-height:56px;border-bottom:1px solid var(--line)}
+.pick b{display:block;font-weight:500}
+.pick em{font-style:normal;font-size:12px;color:var(--part)}
+.pick small{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.grid4 input{padding:0 4px;text-align:center}
+.xrow{padding-left:16px}
+.del{min-height:44px;color:var(--danger);font-size:14px;flex:0 0 auto}
+.vthumb{flex:0 0 48px;height:48px;border-radius:10px;overflow:hidden;background:var(--track);display:grid;place-items:center;cursor:pointer}
+.vthumb img,.vp img{width:100%;height:100%;object-fit:cover;display:block}
+.vthumb i{font-style:normal;font-size:11px;color:var(--muted)}
+.vpick{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px}
+.vp{flex:0 0 84px;border:2px solid var(--line);border-radius:12px;padding:6px;text-align:center}
+.vp.on{border-color:var(--accent)}
+.vp img,.vp .noimg{width:68px;height:68px;border-radius:8px;display:block;margin:0 auto 4px;background:var(--track)}
+.vp small{display:block;font-size:11px;line-height:1.25;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -116,8 +141,10 @@ summary{min-height:44px;display:flex;align-items:center;color:var(--accent);font
   <button id="tabGrams" type="button">Граммовки</button>
   <button id="tabShop" type="button">Покупки</button>
 </div></nav>
+<div class="sheet" id="sheet" hidden></div>
 <div class="toast" id="toast" role="status"></div>
 <script src="plan.js"></script>
+<script src="products.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

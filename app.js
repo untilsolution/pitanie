@@ -26,7 +26,7 @@ function save() {
   memory = state;
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* the page still works for this visit */ }
 }
-const state = Object.assign({ eaten: {}, shop: {}, day: 0, view: 'plan' }, load());
+const state = Object.assign({ eaten: {}, shop: {}, day: 0, view: 'plan', swaps: {}, extras: {} }, load());
 let open = null;
 
 // Cooked weights and dishes outlive any single plan, so they have their own key.
@@ -49,14 +49,25 @@ const num = x => (Math.round(x * 10) / 10).toString().replace('.', ',');
 const whole = x => Math.round(x).toString();
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const idOf = (d, m, i) => `d${d}m${m}i${i}`;
+const itemAt = (d, m, i) => state.swaps[idOf(d, m, i)] || PLAN.days[d].meals[m].items[i];
+const extrasOf = d => state.extras[d] || [];
+const PRODUCTS = window.PRODUCTS || [];
+const SWAPPABLE = /^(Мармелад|Чокопай|Шоколад|Зефир|Мёд|Джем|Пряники|Пломбир|Печенье|Банан|Яблоко|Киви|Апельсин|Мандарин|Слива|Грецкий|Миндаль|Фундук|Кедровые|Курага)/;
+const SWAP_CATS = ['Сладкое', 'Овощи и фрукты', 'Орехи и сухофрукты'];
+const label = p => p.n + (p.brand ? `, ${p.brand}` : '');
+const portionOf = (p, a) => {
+  const k = a / p.base;
+  return { n: label(p), a, u: p.u, p: +(p.p * k).toFixed(1), f: +(p.f * k).toFixed(1), c: +(p.c * k).toFixed(1), k: +(p.k * k).toFixed(1), fb: 0 };
+};
 const eatenOf = (id, it) => Math.min(state.eaten[id] || 0, it.a);
 
 function totals(d) {
   const t = { p: 0, f: 0, c: 0, k: 0, fb: 0 }, plan = { p: 0, f: 0, c: 0, k: 0, fb: 0 };
-  PLAN.days[d].meals.forEach((meal, m) => meal.items.forEach((it, i) => {
-    const part = eatenOf(idOf(d, m, i), it) / it.a;
+  PLAN.days[d].meals.forEach((meal, m) => meal.items.forEach((orig, i) => {
+    const it = itemAt(d, m, i), part = eatenOf(idOf(d, m, i), it) / it.a;
     for (const key in t) { t[key] += it[key] * part; plan[key] += it[key]; }
   }));
+  extrasOf(d).forEach(x => { for (const key in t) t[key] += x[key] || 0; });
   return { t, plan };
 }
 
@@ -93,6 +104,8 @@ function itemHtml(d, m, i, it) {
         <span>из ${it.a} ${it.u}</span>
       </div>${readyEdit}
       <div class="chips">
+        ${SWAPPABLE.test(it.n) ? `<button type="button" data-act="swap" data-id="${id}">Заменить</button>` : ''}
+        ${state.swaps[id] ? `<button type="button" data-act="unswap" data-id="${id}">Вернуть как было</button>` : ''}
         <button type="button" data-act="set" data-id="${id}" data-val="0">Не ел</button>
         <button type="button" data-act="set" data-id="${id}" data-val="${it.u === 'кусок' ? it.a / 2 : Math.round(it.a / 2)}">Половина</button>
         <button type="button" data-act="set" data-id="${id}" data-val="${it.a}">Всё</button>
@@ -108,19 +121,123 @@ function itemHtml(d, m, i, it) {
 function renderPlan() {
   const d = state.day, day = PLAN.days[d];
   const meals = day.meals.map((meal, m) => {
-    const left = meal.items.filter((it, i) => eatenOf(idOf(d, m, i), it) < it.a).length;
-    const kcal = meal.items.reduce((s, it) => s + it.k, 0);
+    const list = meal.items.map((x, i) => itemAt(d, m, i));
+    const left = list.filter((it, i) => eatenOf(idOf(d, m, i), it) < it.a).length;
+    const kcal = list.reduce((s, it) => s + it.k, 0);
     return `<section class="card meal">
       <div class="mealhead"><h2>${esc(meal.name)}</h2><span>${left ? `осталось ${left} · ` : 'всё съедено · '}${whole(kcal)} ккал</span></div>
-      ${meal.items.map((it, i) => itemHtml(d, m, i, it)).join('')}
+      ${list.map((it, i) => itemHtml(d, m, i, it)).join('')}
     </section>`;
   }).join('');
   $('main').innerHTML = `<h1>${esc(day.title)}</h1><p class="sub">${esc(day.note || '')}</p>
     ${summary(d)}${meals}
+    ${extrasHtml(d)}
     <div class="actions">
+      <button type="button" class="btn" data-act="extra">Съел вне плана</button>
       <button type="button" class="btn" data-act="copy">Скопировать итог дня</button>
       <button type="button" class="btn ghost" data-act="reset">Сбросить отметки этого дня</button>
     </div><div id="copyBox"></div>`;
+}
+
+function extrasHtml(d) {
+  const list = extrasOf(d);
+  if (!list.length) return '';
+  const rows = list.map((x, i) => `<div class="item"><div class="row xrow">
+      <div class="info"><b>${esc(x.n)}</b><small>${x.a ? `${x.a} ${x.u} · ` : ''}${whole(x.k)} ккал · Б ${num(x.p)} Ж ${num(x.f)} У ${num(x.c)}</small></div>
+      <button type="button" class="del" data-act="delextra" data-i="${i}" aria-label="Убрать: ${esc(x.n)}">Убрать</button>
+    </div></div>`).join('');
+  const kcal = list.reduce((s, x) => s + x.k, 0);
+  return `<section class="card meal"><div class="mealhead"><h2>Вне плана</h2><span>${whole(kcal)} ккал</span></div>${rows}</section>`;
+}
+
+// Bottom sheet shared by "replace a product" and "ate outside the plan".
+let sheet = null;
+function closeSheet() { sheet = null; $('sheet').hidden = true; $('sheet').innerHTML = ''; document.body.classList.remove('locked'); }
+function swapOptions() {
+  const it = findItem(sheet.id), q = sheet.q.toLowerCase();
+  return PRODUCTS.filter(p => SWAP_CATS.includes(p.cat) && p.u === 'г' && p.k > 0 && !/Сгущёнка/.test(p.n)
+      && !label(p).startsWith(it.n) && label(p).toLowerCase().includes(q))
+    .map(p => {
+      const unit = /^Чокопай/.test(p.n) ? 30 : 5;
+      const a = Math.max(unit, Math.round(it.k / p.k * p.base / unit) * unit);
+      return { p, a, x: portionOf(p, a) };
+    });
+}
+function sheetList() {
+  if (sheet.mode === 'swap') {
+    return swapOptions().map((o, i) => `<button type="button" class="pick" data-act="doswap" data-i="${i}">
+      <b>${esc(o.x.n)}${o.p.freq ? ` <em>${esc(o.p.freq.toLowerCase())}</em>` : ''}</b>
+      <small>${o.a} г · ${whole(o.x.k)} ккал · Б ${num(o.x.p)} Ж ${num(o.x.f)} У ${num(o.x.c)}</small></button>`).join('') || '<p class="sub">Ничего не нашлось</p>';
+  }
+  const q = sheet.q.toLowerCase();
+  return PRODUCTS.map((p, i) => ({ p, i })).filter(o => label(o.p).toLowerCase().includes(q)).map(o =>
+    `<button type="button" class="pick" data-act="pickextra" data-i="${o.i}"><b>${esc(label(o.p))}</b>
+      <small>на ${o.p.base} ${o.p.u}: ${whole(o.p.k)} ккал · Б ${num(o.p.p)} Ж ${num(o.p.f)} У ${num(o.p.c)}</small></button>`).join('') || '<p class="sub">Ничего не нашлось</p>';
+}
+function pickInfo() {
+  const p = PRODUCTS[sheet.pick], a = Number($('xAmount').value) || 0, x = portionOf(p, a);
+  $('xInfo').textContent = `${whole(x.k)} ккал · Б ${num(x.p)} Ж ${num(x.f)} У ${num(x.c)}`;
+}
+function renderSheet() {
+  const s = $('sheet');
+  s.hidden = false;
+  document.body.classList.add('locked');
+  let title, body;
+  if (sheet.mode === 'swap') {
+    const it = findItem(sheet.id);
+    title = `Заменить: ${it.n}`;
+    body = `<p class="sub">Порции подобраны на те же ${whole(it.k)} ккал.</p>`;
+  } else {
+    title = 'Съел вне плана';
+    body = '';
+  }
+  if (sheet.pick !== undefined && sheet.pick !== null) {
+    const p = PRODUCTS[sheet.pick], start = p.base === 100 ? 100 : 1;
+    body = `<h3>${esc(label(p))}</h3>
+      <label class="field"><span>Сколько съел</span><input type="number" inputmode="decimal" min="0" id="xAmount" value="${start}" data-act="xamount" aria-label="Количество"><span>${esc(p.u)}</span></label>
+      <p class="sub" id="xInfo"></p>
+      <button type="button" class="btn small" data-act="addpicked">Добавить</button>
+      <button type="button" class="btn ghost small" data-act="backpick">Другой продукт</button>`;
+    s.innerHTML = sheetFrame(title, body);
+    pickInfo();
+    return;
+  }
+  const custom = sheet.mode === 'extra' ? `<details><summary>Своё блюдо, которого нет в списке</summary>
+      <label class="field col"><span>Название</span><input type="text" id="cName" data-act="calcinput" aria-label="Название"></label>
+      <div class="grid4">
+        <label class="field col"><span>Белки</span><input type="number" inputmode="decimal" id="cP" data-act="calcinput" aria-label="Белки, г"></label>
+        <label class="field col"><span>Жиры</span><input type="number" inputmode="decimal" id="cF" data-act="calcinput" aria-label="Жиры, г"></label>
+        <label class="field col"><span>Углев.</span><input type="number" inputmode="decimal" id="cC" data-act="calcinput" aria-label="Углеводы, г"></label>
+        <label class="field col"><span>Ккал</span><input type="number" inputmode="decimal" id="cK" data-act="calcinput" aria-label="Ккал"></label>
+      </div>
+      <button type="button" class="btn small" data-act="addcustom">Добавить блюдо</button></details>` : '';
+  s.innerHTML = sheetFrame(title, `${body}${custom}
+    <input type="search" id="sheetSearch" class="search" placeholder="Поиск" value="${esc(sheet.q)}" data-act="sheetsearch" aria-label="Поиск продукта">
+    <div id="sheetList">${sheetList()}</div>`);
+}
+const sheetFrame = (title, body) => `<div class="sheetbox" role="dialog" aria-label="${esc(title)}">
+  <div class="sheethead"><h2>${esc(title)}</h2><button type="button" data-act="closesheet">Закрыть</button></div>
+  <div class="sheetbody">${body}</div></div>`;
+function addExtra(x) {
+  (state.extras[state.day] = state.extras[state.day] || []).push(x);
+  save();
+  closeSheet();
+}
+
+// Photos are cut to a small square so they stay tiny in the phone's storage.
+function thumbnail(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const size = 160, c = document.createElement('canvas'), side = Math.min(img.naturalWidth, img.naturalHeight);
+      c.width = c.height = size;
+      c.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.7));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
 }
 
 function shoppingList() {
@@ -148,8 +265,9 @@ function renderShop() {
 }
 
 function renderGrams() {
-  const vesselOptions = '<option value="0">Без посуды</option>' + shared.vessels.map(v =>
-    `<option value="${v.w}">${esc(v.n)}, ${v.w} г</option>`).join('');
+  const thumb = v => (v.photo ? `<img src="${v.photo}" alt="">` : '<span class="noimg" aria-hidden="true"></span>');
+  const vesselPick = '<button type="button" class="vp on" data-act="pickv" data-w="0"><span class="noimg" aria-hidden="true"></span><small>Без посуды</small></button>'
+    + shared.vessels.map(v => `<button type="button" class="vp" data-act="pickv" data-w="${v.w}">${thumb(v)}<small>${esc(v.n)}<br>${v.w} г</small></button>`).join('');
   const cards = cookables().map(n => {
     const y = shared.yield[n];
     return `<section class="card cook" data-name="${esc(n)}">
@@ -159,13 +277,13 @@ function renderGrams() {
       <details><summary>Посчитать по весам</summary>
         <label class="field"><span>Сырой вес всего</span><input type="number" inputmode="numeric" min="1" data-f="raw" data-act="calcinput" aria-label="Сырой вес, г"><span>г</span></label>
         <label class="field"><span>На весах вместе с посудой</span><input type="number" inputmode="numeric" min="1" data-f="scale" data-act="calcinput" aria-label="Вес на весах, г"><span>г</span></label>
-        <label class="field col"><span>Посуда</span><select data-f="vessel" data-act="calcinput" aria-label="Посуда">${vesselOptions}</select></label>
+        <div class="vpick" role="group" aria-label="Посуда">${vesselPick}</div>
         <button type="button" class="btn small" data-act="calc">Посчитать</button>
       </details>
       ${y ? `<button type="button" class="btn ghost small" data-act="clearyield" data-name="${esc(n)}">Стереть, сварю новые</button>` : ''}
     </section>`;
   }).join('');
-  const vessels = shared.vessels.map((v, i) => `<div class="vessel"><span>${esc(v.n)}</span><b>${v.w} г</b>
+  const vessels = shared.vessels.map((v, i) => `<div class="vessel"><label class="vthumb" aria-label="Фото: ${esc(v.n)}">${v.photo ? `<img src="${v.photo}" alt="">` : '<i>Фото</i>'}<input type="file" accept="image/*" data-act="vphoto" data-i="${i}" hidden></label><span>${esc(v.n)}</span><b>${v.w} г</b>
       <button type="button" data-act="delvessel" data-i="${i}" aria-label="Удалить: ${esc(v.n)}">Удалить</button></div>`).join('');
   $('main').innerHTML = `<h1>Граммовки</h1><p class="sub">Впиши, сколько выходит готового, и рацион сам покажет порции.</p>
     ${cards}
@@ -190,7 +308,7 @@ function render() {
 
 function findItem(id) {
   const [, d, m, i] = id.match(/d(\d+)m(\d+)i(\d+)/);
-  return PLAN.days[+d].meals[+m].items[+i];
+  return itemAt(+d, +m, +i);
 }
 function setEaten(id, value) {
   const it = findItem(id);
@@ -211,11 +329,15 @@ function dayText(d) {
   const day = PLAN.days[d], { t, plan } = totals(d), lines = [`${day.title}`];
   day.meals.forEach((meal, m) => {
     lines.push(`${meal.name}:`);
-    meal.items.forEach((it, i) => {
-      const got = eatenOf(idOf(d, m, i), it);
+    meal.items.forEach((orig, i) => {
+      const it = itemAt(d, m, i), got = eatenOf(idOf(d, m, i), it);
       lines.push(`- ${it.n}: ${got >= it.a ? `съел ${it.a} ${it.u}` : got > 0 ? `съел ${got} из ${it.a} ${it.u}` : 'не ел'}`);
     });
   });
+  if (extrasOf(d).length) {
+    lines.push('Вне плана:');
+    extrasOf(d).forEach(x => lines.push(`- ${x.n}${x.a ? `: ${x.a} ${x.u}` : ''}, ${whole(x.k)} ккал`));
+  }
   lines.push(`Итого съедено: ${whole(t.k)} ккал, Б ${whole(t.p)}, Ж ${whole(t.f)}, У ${whole(t.c)}`);
   lines.push(`По плану: ${whole(plan.k)} ккал, Б ${whole(plan.p)}, Ж ${whole(plan.f)}, У ${whole(plan.c)}`);
   return lines.join('\n');
@@ -237,8 +359,42 @@ async function copyDay() {
 
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
-  if (!el || ['input', 'cookedinput', 'yield', 'calcinput'].includes(el.dataset.act)) return;
+  if (!el || ['input', 'cookedinput', 'yield', 'calcinput', 'sheetsearch', 'xamount', 'vphoto'].includes(el.dataset.act)) return;
   const { act, id } = el.dataset;
+  if (act === 'pickv') {
+    el.closest('.vpick').querySelectorAll('.vp').forEach(b => b.classList.toggle('on', b === el));
+    return;
+  }
+  if (act === 'extra') { sheet = { mode: 'extra', q: '' }; renderSheet(); return; }
+  if (act === 'swap') { sheet = { mode: 'swap', id, q: '' }; renderSheet(); return; }
+  if (act === 'closesheet') { closeSheet(); return; }
+  if (act === 'pickextra') { sheet.pick = +el.dataset.i; renderSheet(); return; }
+  if (act === 'backpick') { sheet.pick = null; renderSheet(); return; }
+  if (act === 'addpicked') {
+    const a = Number($('xAmount').value) || 0;
+    if (a <= 0) { toast('Впиши количество'); return; }
+    addExtra(portionOf(PRODUCTS[sheet.pick], a));
+    render();
+    return;
+  }
+  if (act === 'addcustom') {
+    const n = $('cName').value.trim(), v = k => Number($(k).value) || 0;
+    if (!n || !v('cK')) { toast('Впиши название и калории'); return; }
+    addExtra({ n, a: 0, u: '', p: v('cP'), f: v('cF'), c: v('cC'), k: v('cK'), fb: 0 });
+    render();
+    return;
+  }
+  if (act === 'doswap') {
+    const o = swapOptions()[+el.dataset.i];
+    state.swaps[sheet.id] = o.x;
+    delete state.eaten[sheet.id];
+    save();
+    closeSheet();
+    render();
+    return;
+  }
+  if (act === 'unswap') { delete state.swaps[id]; delete state.eaten[id]; save(); render(); return; }
+  if (act === 'delextra') { extrasOf(state.day).splice(+el.dataset.i, 1); save(); render(); return; }
   if (act === 'day') { state.day = +el.dataset.d; open = null; save(); render(); window.scrollTo(0, 0); return; }
   if (act === 'tick') {
     const it = findItem(id);
@@ -256,7 +412,7 @@ document.addEventListener('click', e => {
     save();
   } else if (act === 'calc') {
     const card = el.closest('.cook'), val = f => Number(card.querySelector(`[data-f=${f}]`).value) || 0;
-    const net = val('scale') - val('vessel');
+    const net = val('scale') - Number(card.querySelector('.vp.on').dataset.w);
     if (val('raw') <= 0 || net <= 0) { toast('Проверь сырой вес и вес на весах'); return; }
     shared.yield[card.dataset.name] = Math.round(net / val('raw') * 100);
     saveShared();
@@ -284,9 +440,21 @@ document.addEventListener('click', e => {
   }
   render();
 });
+document.addEventListener('input', e => {
+  const act = e.target.dataset.act;
+  if (act === 'sheetsearch') { sheet.q = e.target.value; $('sheetList').innerHTML = sheetList(); }
+  if (act === 'xamount') pickInfo();
+});
 document.addEventListener('change', e => {
   const t = e.target, act = t.dataset.act;
   if (act === 'input') { setEaten(t.dataset.id, t.value); render(); }
+  if (act === 'vphoto' && t.files[0]) {
+    thumbnail(t.files[0]).then(url => {
+      shared.vessels[+t.dataset.i].photo = url;
+      saveShared();
+      render();
+    }).catch(() => toast('Не получилось прочитать фото'));
+  }
   if (act === 'cookedinput') {
     const it = findItem(t.dataset.id);
     setEaten(t.dataset.id, Number(t.value) * 100 / shared.yield[it.n]);
