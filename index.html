@@ -8,36 +8,30 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Питание">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#14181a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f3f5f9">
+<meta name="color-scheme" content="light">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="plate-icon-180.png">
 <style>
 :root{
-  --bg:#f6f4ef;--card:#fff;--ink:#1d2422;--muted:#6c7471;--line:#e6e2d9;
-  --accent:#2f6b5a;--accent-soft:#dcebe5;--on-accent:#fff;
-  --part:#c98a1b;--part-soft:#f8ecd2;--danger:#b4412f;
-  --prot:#2f6b5a;--fat:#c98a1b;--carb:#3f6fb5;--kcal:#1d2422;--track:#ece8df;
+  --bg:#f3f5f9;--card:#fff;--ink:#17202e;--muted:#667187;--line:#e1e6ee;
+  --accent:#4a56d8;--accent-soft:#e8eafb;--on-accent:#fff;
+  --part:#c98a1b;--part-soft:#fbf0d9;--danger:#b4412f;
+  --prot:#2f6b5a;--fat:#c98a1b;--carb:#3f6fb5;--kcal:#17202e;--track:#e6e9f0;
 }
-@media (prefers-color-scheme:dark){:root{
-  --bg:#14181a;--card:#1e2427;--ink:#eef1ef;--muted:#98a29e;--line:#2d3538;
-  --accent:#5fb89d;--accent-soft:#21403a;--on-accent:#10211c;
-  --part:#e2ad4f;--part-soft:#43361c;--danger:#e8816f;
-  --prot:#5fb89d;--fat:#e2ad4f;--carb:#7fa7e6;--kcal:#eef1ef;--track:#2d3538;
-}}
 [hidden]{display:none!important}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
 button,input{font:inherit;color:inherit}
 button{background:none;border:0;padding:0;cursor:pointer}
 .wrap{max-width:560px;margin:0 auto;padding:0 16px}
-header{position:sticky;top:0;z-index:5;background:var(--bg);padding-top:calc(10px + env(safe-area-inset-top));border-bottom:1px solid var(--line)}
-.days{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;scrollbar-width:none}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding-top:calc(6px + env(safe-area-inset-top));border-bottom:1px solid var(--line)}
+.days{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none}
 .days::-webkit-scrollbar{display:none}
-.day{flex:0 0 auto;min-height:40px;padding:0 16px;border-radius:20px;background:var(--card);border:1px solid var(--line);font-weight:600;font-size:15px}
+.day{flex:0 0 auto;min-height:30px;padding:0 12px;border-radius:15px;background:var(--card);border:1px solid var(--line);font-weight:600;font-size:13.5px}
 .day[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
-h1{font-size:21px;line-height:1.2;margin:18px 0 2px}
+h1{font-size:21px;line-height:1.2;margin:14px 0 2px}
 .sub{color:var(--muted);font-size:14px;margin:0 0 14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px}
 .sum{padding:14px 16px;margin-bottom:16px}
@@ -76,16 +70,15 @@ h1{font-size:21px;line-height:1.2;margin:18px 0 2px}
 .actions{display:grid;gap:10px;margin:18px 0 8px}
 .btn{min-height:48px;border-radius:14px;font-weight:600;background:var(--accent);color:var(--on-accent)}
 .btn.ghost{background:none;border:1px solid var(--line);color:var(--muted);font-weight:500}
-nav{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
-nav div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr 1fr}
-nav button{min-height:56px;font-weight:600;color:var(--muted);font-size:15px}
-nav button[aria-current=page]{color:var(--accent)}
+nav{display:flex;gap:2px;padding:2px;margin-bottom:6px;background:var(--track);border-radius:10px}
+nav button{flex:1 1 0;min-width:0;min-height:32px;border-radius:8px;font-weight:600;color:var(--muted);font-size:13.5px;white-space:nowrap}
+nav button[aria-current=page]{background:var(--card);color:var(--accent);box-shadow:0 1px 2px rgba(23,32,46,.12)}
 .shop{display:flex;align-items:center;gap:12px;min-height:60px;width:100%;padding:8px 16px 8px 12px;border-top:1px solid var(--line);text-align:left}
 .shop:first-child{border-top:0}
 .shop .amt{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
 .shop.done{color:var(--muted)}
 .shop.done .tick i{background:var(--accent);border-color:var(--accent)}
-.toast{position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;z-index:9;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100% - 32px)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;z-index:9;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100% - 32px)}
 .toast.on{opacity:1}
 textarea.copy{width:100%;height:220px;margin-top:10px;border-radius:12px;border:1px solid var(--line);background:var(--card);padding:10px;font-size:16px}
 .ck{color:var(--accent)!important;font-weight:600}
@@ -135,7 +128,6 @@ body.locked{overflow:hidden}
 .webhead{margin:6px 0 2px}
 .wcard{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;margin-bottom:12px;flex-wrap:wrap}
 .wcard .step{margin:0}
-.wcard button[data-tr=wedit]{color:var(--muted);font-size:14px;min-height:40px}
 .wsave{min-height:44px;padding:0 16px;border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:600}
 .trhint{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;margin-bottom:12px;background:var(--accent-soft)}
 .trhint button{min-height:40px;font-weight:600;white-space:nowrap}
@@ -157,14 +149,13 @@ body.locked{overflow:hidden}
 </style>
 </head>
 <body>
-<header><div class="wrap"><div class="days" id="days" role="tablist" aria-label="Дни плана"></div></div></header>
-<main class="wrap" id="main"></main>
-<nav><div>
+<header><div class="wrap"><nav aria-label="Разделы">
   <button id="tabPlan" type="button">Рацион</button>
   <button id="tabTrain" type="button">Тренировка</button>
   <button id="tabGrams" type="button">Граммовки</button>
   <button id="tabShop" type="button">Покупки</button>
-</div></nav>
+</nav><div class="days" id="days" role="tablist" aria-label="Дни плана"></div></div></header>
+<main class="wrap" id="main"></main>
 <div class="sheet" id="sheet" hidden></div>
 <div class="toast" id="toast" role="status"></div>
 <script src="plan.js"></script>

@@ -144,6 +144,7 @@ function renderPlan() {
     ${extrasHtml(d)}
     <div class="actions">
       ${viewer ? '' : '<button type="button" class="btn" data-act="extra">Съел вне плана</button>'}
+      ${!viewer && window.Sync ? weightLink() : ''}
       ${viewer ? '' : '<button type="button" class="btn ghost" data-act="reset">Сбросить отметки этого дня</button>'}
       <button type="button" class="btn ghost" data-act="sync">${esc(window.Sync ? Sync.buttonText() : 'Синхронизация')}</button>
     </div>`;

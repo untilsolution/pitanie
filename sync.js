@@ -284,10 +284,13 @@ window.Sync = (() => {
     get viewer() { return me.mode === 'viewer' || me.mode === 'shopper'; },
     get canShop() { return me.mode !== 'viewer'; },
     get journal() { return journal; },
-    saveJournal() {
+    async saveJournal() {
       remember(JKEY, JSON.stringify(journal));
       remember(JDIRTY, '1');
-      flushJournal();
+      if (me.mode !== 'writer') return 'нет ключа на этом телефоне';
+      await flushJournal();
+      if (state.view === 'plan') label();
+      return dirty() ? me.error || 'нет связи' : '';
     },
     shop(name, on) {
       if (me.mode !== 'writer' && me.mode !== 'shopper') return;

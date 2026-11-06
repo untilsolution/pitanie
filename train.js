@@ -158,19 +158,33 @@ function buildLog(plan) {
   return { exercises, note: ui.note };
 }
 
-// Верх вкладки «Рацион»: вес и напоминание
+const seenList = () => { try { return JSON.parse(localStorage.getItem('pitanie:seen')) || []; } catch (e) { return []; } };
+
+// Плашки: напоминание о замерах считается здесь, чтобы работать при выключенном компьютере,
+// а остальные присылает BodyLab. Замер, записанный в BodyLab, убирает напоминание сам.
+function notices() {
+  const out = [], today = todayStr(), day = new Date().getDay(), last = T?.lastMeasure;
+  const gap = last ? Math.round((parseDay(today) - parseDay(last)) / 864e5) : null;
+  if (last !== today) {
+    if (day === 5) out.push({ id: `measure-${today}`, text: 'Сегодня пятница: замеры, вес и обхваты' });
+    else if (gap >= 8) out.push({ id: `measure-${today}`, text: `Прошло ${gap} дн. с замера, пятничный пропущен` });
+    else if (day === 4) out.push({ id: `measure-${today}`, text: 'Завтра утром замеры: вес и обхваты' });
+  }
+  return [...out, ...(T?.notices || [])];
+}
+
+// Кнопка внизу рациона, когда форма веса уже скрыта
+window.weightLink = () => {
+  const w = journal().weights[todayStr()];
+  return w && !ui.editWeight ? `<button type="button" class="btn ghost" data-tr="wedit">Вес сегодня ${num(w)} кг, изменить</button>` : '';
+};
+
+// Верх вкладки «Рацион»: плашки и вес
 window.trainTop = () => {
-  const day = new Date().getDay(), today = todayStr();
-  let hint = '';
-  let seen = '';
-  try { seen = localStorage.getItem('pitanie:measure-seen') || ''; } catch (e) { /* покажем ещё раз */ }
-  if ((day === 4 || day === 5) && seen !== today) {
-    hint = `<section class="card trhint"><span>${day === 4 ? 'Завтра утром замеры: вес и обхваты' : 'Сегодня пятница: замеры, вес и обхваты'}</span><button type="button" data-tr="seen">Понятно</button></section>`;
-  }
+  const today = todayStr();
+  const hint = notices().filter(n => !seenList().includes(n.id)).map(n => `<section class="card trhint"><span>${esc(n.text)}</span><button type="button" data-tr="seen" data-id="${esc(n.id)}">Закрыть</button></section>`).join('');
   const w = journal().weights[today];
-  if (w && !ui.editWeight) {
-    return `${hint}<section class="card wcard"><span>Вес сегодня</span><b>${num(w)} кг</b><button type="button" data-tr="wedit">Изменить</button></section>`;
-  }
+  if (w && !ui.editWeight) return hint;
   const start = w ?? lastWeight() ?? '';
   return `${hint}<section class="card wcard"><span>Вес</span>
     <div class="step"><button type="button" data-tr="wstep" data-d="-0.1" aria-label="Меньше">−</button>
@@ -179,14 +193,20 @@ window.trainTop = () => {
     <button type="button" class="wsave" data-tr="wsave">Записать</button></section>`;
 };
 
+// Хорошая новость только после ответа GitHub
+function report(text) {
+  Sync.saveJournal().then(error => toast(error ? `Сохранено на телефоне, не отправлено: ${error}` : text));
+}
+
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-tr]');
   if (!el) return;
   const act = el.dataset.tr;
   if (act === 'seen') {
-    try { localStorage.setItem('pitanie:measure-seen', todayStr()); } catch (x) { /* покажем ещё раз */ }
+    try { localStorage.setItem('pitanie:seen', JSON.stringify([...seenList(), el.dataset.id].slice(-60))); } catch (x) { /* покажем ещё раз */ }
   } else if (act === 'wedit') {
     ui.editWeight = true;
+    window.scrollTo(0, 0);
   } else if (act === 'wstep') {
     const box = $('wVal');
     box.value = (Math.round(((Number(box.value) || 0) + Number(el.dataset.d)) * 10) / 10).toFixed(1);
@@ -196,8 +216,7 @@ document.addEventListener('click', e => {
     if (!(v > 30 && v < 300)) { toast('Проверь вес'); return; }
     journal().weights[todayStr()] = v;
     ui.editWeight = false;
-    Sync.saveJournal();
-    toast('Вес записан');
+    report('Вес записан');
   } else if (act === 'go') {
     ui.slot = scheduleList().items[+el.dataset.i].id;
     window.scrollTo(0, 0);
@@ -206,10 +225,9 @@ document.addEventListener('click', e => {
   } else if (act === 'finish') {
     const plan = slotPlanOf(ui.slot);
     doneMap()[ui.slot] = { date: $('trDate').value || todayStr(), data: buildLog(plan) };
-    Sync.saveJournal();
+    report('Тренировка записана');
     ui.slot = null;
     ui.loaded = null;
-    toast('Тренировка записана');
     window.scrollTo(0, 0);
   } else if (act === 'undo') {
     if (!confirm('Отменить отметку этой тренировки?')) return;
