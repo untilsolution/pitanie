@@ -41,6 +41,8 @@ function saveShared() {
   try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
 }
 const COOK = /^(Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты)/;
+const DRY = /^(Макароны|Рис|Гречка|Крупа|Овсян)/;
+const rawWord = n => (DRY.test(n) ? 'сухого' : 'сырого');
 const cookables = () => [...new Set(PLAN.days.flatMap(d => d.meals.flatMap(m => m.items.map(it => it.n))).filter(n => COOK.test(n)))];
 const cookedOf = (it, raw) => (shared.yield[it.n] ? Math.round(raw * shared.yield[it.n] / 100) : null);
 
@@ -51,7 +53,12 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const idOf = (d, m, i) => `d${d}m${m}i${i}`;
 const itemAt = (d, m, i) => state.swaps[idOf(d, m, i)] || PLAN.days[d].meals[m].items[i];
 const extrasOf = d => state.extras[d] || [];
-const PRODUCTS = window.PRODUCTS || [];
+// Ready-made food that is not in the table. Typical values, per 100 g.
+const READY_FOOD = [
+  { cat: 'Готовая еда', n: 'Шаурма с курицей', brand: '', freq: '', base: 100, u: 'г', p: 8.5, f: 8, c: 22, k: 190, start: 350 },
+  { cat: 'Готовая еда', n: 'Картофель фри', brand: '', freq: '', base: 100, u: 'г', p: 3, f: 15, c: 40, k: 310, start: 100 },
+];
+const PRODUCTS = [...(window.PRODUCTS || []), ...READY_FOOD].sort((x, y) => x.n.localeCompare(y.n, 'ru'));
 const SWAPPABLE = /^(Мармелад|Чокопай|Шоколад|Зефир|Мёд|Джем|Пряники|Пломбир|Печенье|Банан|Яблоко|Киви|Апельсин|Мандарин|Слива|Грецкий|Миндаль|Фундук|Кедровые|Курага)/;
 const SWAP_CATS = ['Сладкое', 'Овощи и фрукты', 'Орехи и сухофрукты'];
 const label = p => p.n + (p.brand ? `, ${p.brand}` : '');
@@ -172,10 +179,48 @@ function sheetList() {
   const q = sheet.q.toLowerCase();
   return PRODUCTS.map((p, i) => ({ p, i })).filter(o => label(o.p).toLowerCase().includes(q)).map(o =>
     `<button type="button" class="pick" data-act="pickextra" data-i="${o.i}"><b>${esc(label(o.p))}</b>
-      <small>на ${o.p.base} ${o.p.u}: ${whole(o.p.k)} ккал · Б ${num(o.p.p)} Ж ${num(o.p.f)} У ${num(o.p.c)}</small></button>`).join('') || '<p class="sub">Ничего не нашлось</p>';
+      <small>на ${o.p.base} ${o.p.u}: ${whole(o.p.k)} ккал · Б ${num(o.p.p)} Ж ${num(o.p.f)} У ${num(o.p.c)}</small></button>`).join('') || '<p class="sub">В таблице нет. Нажми «Найти в интернете».</p>';
+}
+function webList() {
+  if (sheet.webState === 'load') return '<p class="sub">Ищу, это может занять до 15 секунд…</p>';
+  if (sheet.webState === 'error') return '<p class="sub">Интернет-база не ответила. Попробуй ещё раз или впиши блюдо вручную.</p>';
+  if (sheet.webState === 'empty') return '<p class="sub">В интернете не нашлось. Впиши блюдо вручную.</p>';
+  if (!sheet.web || !sheet.web.length) return '';
+  return `<p class="sub webhead">Из интернета, база Open Food Facts. Значения от пользователей, примерные.</p>` + sheet.web.map((p, i) =>
+    `<button type="button" class="pick" data-act="pickweb" data-i="${i}"><b>${esc(label(p))}</b>
+      <small>на 100 г: ${whole(p.k)} ккал · Б ${num(p.p)} Ж ${num(p.f)} У ${num(p.c)}</small></button>`).join('');
+}
+async function webSearch() {
+  const q = sheet.q.trim();
+  if (q.length < 2) { toast('Сначала впиши название в поиск'); return; }
+  sheet.webState = 'load';
+  $('webBox').innerHTML = webList();
+  const stop = new AbortController(), timer = setTimeout(() => stop.abort(), 15000);
+  try {
+    const url = 'https://ru.openfoodfacts.org/cgi/search.pl?search_simple=1&action=process&json=1&page_size=30&fields=product_name,brands,nutriments&search_terms=' + encodeURIComponent(q);
+    const data = await (await fetch(url, { signal: stop.signal })).json();
+    const seen = new Set();
+    const found = (data.products || []).map(x => {
+      const t = x.nutriments || {}, k = t['energy-kcal_100g'] ?? (t['energy_100g'] ? t['energy_100g'] / 4.184 : null);
+      return { n: (x.product_name || '').trim(), brand: (x.brands || '').split(',')[0].trim(), freq: '', base: 100, u: 'г', k, p: t.proteins_100g || 0, f: t.fat_100g || 0, c: t.carbohydrates_100g || 0 };
+    }).filter(p => {
+      const key = `${label(p)}|${Math.round(p.k)}`.toLowerCase();
+      if (!p.n || !p.k || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 12);
+    if (!sheet) return;
+    sheet.web = found;
+    sheet.webState = found.length ? '' : 'empty';
+  } catch (e) {
+    if (!sheet) return;
+    sheet.webState = 'error';
+  }
+  clearTimeout(timer);
+  if ($('webBox')) $('webBox').innerHTML = webList();
 }
 function pickInfo() {
-  const p = PRODUCTS[sheet.pick], a = Number($('xAmount').value) || 0, x = portionOf(p, a);
+  const p = sheet.pick, a = Number($('xAmount').value) || 0, x = portionOf(p, a);
   $('xInfo').textContent = `${whole(x.k)} ккал · Б ${num(x.p)} Ж ${num(x.f)} У ${num(x.c)}`;
 }
 function renderSheet() {
@@ -191,8 +236,8 @@ function renderSheet() {
     title = 'Съел вне плана';
     body = '';
   }
-  if (sheet.pick !== undefined && sheet.pick !== null) {
-    const p = PRODUCTS[sheet.pick], start = p.base === 100 ? 100 : 1;
+  if (sheet.pick) {
+    const p = sheet.pick, start = p.start || (p.base === 100 ? 100 : 1);
     body = `<h3>${esc(label(p))}</h3>
       <label class="field"><span>Сколько съел</span><input type="number" inputmode="decimal" min="0" id="xAmount" value="${start}" data-act="xamount" aria-label="Количество"><span>${esc(p.u)}</span></label>
       <p class="sub" id="xInfo"></p>
@@ -211,9 +256,12 @@ function renderSheet() {
         <label class="field col"><span>Ккал</span><input type="number" inputmode="decimal" id="cK" data-act="calcinput" aria-label="Ккал"></label>
       </div>
       <button type="button" class="btn small" data-act="addcustom">Добавить блюдо</button></details>` : '';
-  s.innerHTML = sheetFrame(title, `${body}${custom}
-    <input type="search" id="sheetSearch" class="search" placeholder="Поиск" value="${esc(sheet.q)}" data-act="sheetsearch" aria-label="Поиск продукта">
+  const web = sheet.mode === 'extra' ? '<button type="button" class="btn ghost small webbtn" data-act="websearch">Найти в интернете</button><div id="webBox"></div>' : '';
+  s.innerHTML = sheetFrame(title, `${body}
+    <input type="search" id="sheetSearch" class="search" placeholder="Найти продукт" value="${esc(sheet.q)}" data-act="sheetsearch" aria-label="Поиск продукта">
+    ${web}${custom}
     <div id="sheetList">${sheetList()}</div>`);
+  if ($('webBox')) $('webBox').innerHTML = webList();
 }
 const sheetFrame = (title, body) => `<div class="sheetbox" role="dialog" aria-label="${esc(title)}">
   <div class="sheethead"><h2>${esc(title)}</h2><button type="button" data-act="closesheet">Закрыть</button></div>
@@ -265,17 +313,17 @@ function renderShop() {
 }
 
 function renderGrams() {
-  const thumb = v => (v.photo ? `<img src="${v.photo}" alt="">` : '<span class="noimg" aria-hidden="true"></span>');
-  const vesselPick = '<button type="button" class="vp on" data-act="pickv" data-w="0"><span class="noimg" aria-hidden="true"></span><small>Без посуды</small></button>'
+  const thumb = v => (v.photo ? `<img src="${v.photo}" alt="">` : '');
+  const vesselPick = '<button type="button" class="vp on" data-act="pickv" data-w="0"><small>Без посуды</small></button>'
     + shared.vessels.map(v => `<button type="button" class="vp" data-act="pickv" data-w="${v.w}">${thumb(v)}<small>${esc(v.n)}<br>${v.w} г</small></button>`).join('');
   const cards = cookables().map(n => {
     const y = shared.yield[n];
     return `<section class="card cook" data-name="${esc(n)}">
       <h2>${esc(n)}</h2>
-      <label class="field"><span>Из 100 г сырого выходит</span>
-        <input type="number" inputmode="numeric" min="1" value="${y || ''}" placeholder="—" data-act="yield" data-name="${esc(n)}" aria-label="${esc(n)}: вес готового из 100 г сырого"><span>г</span></label>
+      <label class="field"><span>Из 100 г ${rawWord(n)} выходит</span>
+        <input type="number" inputmode="numeric" min="1" value="${y || ''}" placeholder="—" data-act="yield" data-name="${esc(n)}" aria-label="${esc(n)}: вес готового из 100 г ${rawWord(n)}"><span>г</span></label>
       <details><summary>Посчитать по весам</summary>
-        <label class="field"><span>Сырой вес всего</span><input type="number" inputmode="numeric" min="1" data-f="raw" data-act="calcinput" aria-label="Сырой вес, г"><span>г</span></label>
+        <label class="field"><span>${DRY.test(n) ? 'Сухой' : 'Сырой'} вес всего</span><input type="number" inputmode="numeric" min="1" data-f="raw" data-act="calcinput" aria-label="${DRY.test(n) ? 'Сухой' : 'Сырой'} вес, г"><span>г</span></label>
         <label class="field"><span>На весах вместе с посудой</span><input type="number" inputmode="numeric" min="1" data-f="scale" data-act="calcinput" aria-label="Вес на весах, г"><span>г</span></label>
         <div class="vpick" role="group" aria-label="Посуда">${vesselPick}</div>
         <button type="button" class="btn small" data-act="calc">Посчитать</button>
@@ -368,12 +416,14 @@ document.addEventListener('click', e => {
   if (act === 'extra') { sheet = { mode: 'extra', q: '' }; renderSheet(); return; }
   if (act === 'swap') { sheet = { mode: 'swap', id, q: '' }; renderSheet(); return; }
   if (act === 'closesheet') { closeSheet(); return; }
-  if (act === 'pickextra') { sheet.pick = +el.dataset.i; renderSheet(); return; }
+  if (act === 'pickextra') { sheet.pick = PRODUCTS[+el.dataset.i]; renderSheet(); return; }
+  if (act === 'pickweb') { sheet.pick = sheet.web[+el.dataset.i]; renderSheet(); return; }
+  if (act === 'websearch') { webSearch(); return; }
   if (act === 'backpick') { sheet.pick = null; renderSheet(); return; }
   if (act === 'addpicked') {
     const a = Number($('xAmount').value) || 0;
     if (a <= 0) { toast('Впиши количество'); return; }
-    addExtra(portionOf(PRODUCTS[sheet.pick], a));
+    addExtra(portionOf(sheet.pick, a));
     render();
     return;
   }
@@ -413,10 +463,10 @@ document.addEventListener('click', e => {
   } else if (act === 'calc') {
     const card = el.closest('.cook'), val = f => Number(card.querySelector(`[data-f=${f}]`).value) || 0;
     const net = val('scale') - Number(card.querySelector('.vp.on').dataset.w);
-    if (val('raw') <= 0 || net <= 0) { toast('Проверь сырой вес и вес на весах'); return; }
+    if (val('raw') <= 0 || net <= 0) { toast('Проверь оба веса'); return; }
     shared.yield[card.dataset.name] = Math.round(net / val('raw') * 100);
     saveShared();
-    toast(`Готового всего ${net} г, из 100 г сырого ${shared.yield[card.dataset.name]} г`);
+    toast(`Готового всего ${net} г, из 100 г ${rawWord(card.dataset.name)} ${shared.yield[card.dataset.name]} г`);
   } else if (act === 'clearyield') {
     delete shared.yield[el.dataset.name];
     saveShared();
