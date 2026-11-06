@@ -145,7 +145,6 @@ function renderPlan() {
     <div class="actions">
       ${viewer ? '' : '<button type="button" class="btn" data-act="extra">Съел вне плана</button>'}
       ${!viewer && window.Sync ? weightLink() : ''}
-      ${viewer ? '' : '<button type="button" class="btn ghost" data-act="reset">Сбросить отметки этого дня</button>'}
       <button type="button" class="btn ghost" data-act="sync">${esc(window.Sync ? Sync.buttonText() : 'Синхронизация')}</button>
     </div>`;
 }
@@ -518,11 +517,6 @@ document.addEventListener('click', e => {
     if (!confirm('Удалить эту посуду?')) return;
     shared.vessels.splice(+el.dataset.i, 1);
     saveShared();
-  } else if (act === 'reset') {
-    if (!confirm('Сбросить все отметки этого дня?')) return;
-    Object.keys(state.eaten).filter(k => k.startsWith(`d${state.day}m`)).forEach(k => delete state.eaten[k]);
-    open = null;
-    save();
   }
   render();
 });
