@@ -45,11 +45,13 @@ function saveShared() {
   try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
   if (window.Sync) Sync.changed();
 }
-const COOK = /^(Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты)/;
+const COOK = /^(Пюре|Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты)/;
 const DRY = /^(Макароны|Рис|Гречка|Крупа|Овсян)/;
-const rawWord = n => (DRY.test(n) ? 'сухого' : 'сырого');
+// Mash is planned in finished grams, so its yield only shows how much water boiled off, it never rescales portions.
+const MASH = /^Пюре/;
+const rawWord = n => (DRY.test(n) ? 'сухого' : MASH.test(n) ? 'продуктов' : 'сырого');
 const cookables = () => [...new Set(PLAN.days.flatMap(d => d.meals.flatMap(m => m.items.map(it => it.n))).filter(n => COOK.test(n)))];
-const cookedOf = (it, raw) => (shared.yield[it.n] ? Math.round(raw * shared.yield[it.n] / 100) : null);
+const cookedOf = (it, raw) => (shared.yield[it.n] && !MASH.test(it.n) ? Math.round(raw * shared.yield[it.n] / 100) : null);
 
 const $ = id => document.getElementById(id);
 const num = x => (Math.round(x * 10) / 10).toString().replace('.', ',');
@@ -413,7 +415,7 @@ function renderGrams() {
     <label class="field vcustom" hidden><span>Вес этой посуды</span><input type="number" inputmode="numeric" min="1" data-f="vcustom" data-act="calcinput" aria-label="Вес посуды, г"><span>г</span></label>`;
   const card = n => {
     const y = shared.yield[n], at = (shared.yieldAt || {})[n], raw = (shared.raw || {})[n];
-    const before = DRY.test(n) ? 'до варки' : 'до готовки';
+    const before = DRY.test(n) || MASH.test(n) ? 'до варки' : 'до готовки';
     const rawLine = rawEdit === n
       ? `<label class="rawedit"><span>Вес ${before}</span><input type="number" inputmode="numeric" min="1" value="${raw ? raw.g : ''}" data-act="rawsave" data-name="${esc(n)}" aria-label="${esc(dishName(n))}: вес ${before}, г"><span>г</span></label>`
       : `<button type="button" class="rawbtn" data-act="rawedit" data-name="${esc(n)}">${raw ? `Вес ${before}: ${raw.g} г · ${shortDate(raw.at)}` : `+ Записать вес ${before}`}</button>`;
@@ -423,7 +425,7 @@ function renderGrams() {
         <input type="number" inputmode="numeric" min="1" value="${y || ''}" placeholder="—" data-act="yield" data-name="${esc(n)}" aria-label="${esc(dishName(n))}: вес готового из 100 г ${rawWord(n)}"><span>г</span></label>
       ${rawLine}
       <details><summary>Посчитать по весам</summary>
-        <label class="field"><span>Вес продукта ${before}</span><input type="number" inputmode="numeric" min="1" value="${raw ? raw.g : ''}" data-f="raw" data-act="calcinput" aria-label="Вес продукта ${before}, г"><span>г</span></label>
+        <label class="field"><span>Вес ${MASH.test(n) ? 'всех продуктов' : 'продукта'} ${before}</span><input type="number" inputmode="numeric" min="1" value="${raw ? raw.g : ''}" data-f="raw" data-act="calcinput" aria-label="Вес продукта ${before}, г"><span>г</span></label>
         <label class="field"><span>Вес готового вместе с посудой</span><input type="number" inputmode="numeric" min="1" data-f="scale" data-act="calcinput" aria-label="Вес готового вместе с посудой, г"><span>г</span></label>
         ${vesselPick}
         <button type="button" class="btn small" data-act="calc">Посчитать</button>
