@@ -359,7 +359,7 @@ function openPhoto(v) {
   box.dataset.act = 'closephoto';
   box.setAttribute('role', 'dialog');
   box.setAttribute('aria-label', `Фото: ${v.n}`);
-  box.innerHTML = `<img src="${v.big || v.photo}" alt="${esc(v.n)}"><p>${esc(v.n)}, ${v.w} г${v.big ? '' : '<br><small>Это старое маленькое фото. Чтобы было чётко, нажми «Заменить фото» и сними заново.</small>'}</p><button type="button" data-act="closephoto">Закрыть</button>`;
+  box.innerHTML = `<img src="${v.big || v.photo}" alt="${esc(v.n)}"><p>${esc(v.n)}, ${v.w} г</p><button type="button" data-act="closephoto">Закрыть</button>`;
   document.body.appendChild(box);
   document.body.classList.add('locked');
 }
