@@ -408,7 +408,7 @@ function renderGrams() {
       <button type="button" class="on" data-act="vfilter" data-cat="">Вся</button>${cats.map(c => `<button type="button" data-act="vfilter" data-cat="${c}">${c}</button>`).join('')}</div>` : ''}
     <div class="vpick" role="group" aria-label="Посуда">
       <button type="button" class="vp on" data-act="pickv" data-w="0"><small>Без посуды</small></button>
-      ${shared.vessels.map(v => `<button type="button" class="vp" data-act="pickv" data-w="${v.w}" data-cat="${vcatOf(v)}">${thumb(v)}<small>${esc(v.n)}<br>${v.w} г</small></button>`).join('')}
+      ${shared.vessels.map(v => `<button type="button" class="vp" data-act="pickv" data-w="${v.w}" data-cat="${vcatOf(v)}">${thumb(v)}<small><span>${esc(v.n)}</span><b>${v.w} г</b></small></button>`).join('')}
       <button type="button" class="vp" data-act="pickv" data-custom="1"><small>Своя посуда</small></button>
     </div>
     <label class="field vcustom" hidden><span>Вес этой посуды</span><input type="number" inputmode="numeric" min="1" data-f="vcustom" data-act="calcinput" aria-label="Вес посуды, г"><span>г</span></label>`;
