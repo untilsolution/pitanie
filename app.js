@@ -14,7 +14,7 @@ const SHOP = [
   { re: /^Шоколад/, fmt: g => `${Math.ceil(g / 75)} пл. (${g} г)` },
   { re: /^Чокопай/, name: 'Чокопай', fmt: g => `${Math.ceil(g / 30)} шт.` },
   { re: /^Белок яичный/, name: 'Яйца на белок', fmt: g => `${Math.ceil(g / 37.5)} шт.` },
-  { re: /^Пюре/, name: 'Картофель на пюре', fmt: g => grams(g) },
+  { re: /^Пюре/, name: 'Пюре (картофель, молоко, масло)', fmt: g => grams(g) },
   { re: /^Говядина/, name: 'Говядина', fmt: g => grams(g) },
   { re: /^Тунец/, name: 'Тунец', fmt: g => `${Math.ceil(g / 185)} банк. по 185 г` },
 ];
@@ -45,7 +45,7 @@ function saveShared() {
   try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
   if (window.Sync) Sync.changed();
 }
-const COOK = /^(Макароны|Рис|Гречка|Пюре|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты)/;
+const COOK = /^(Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты)/;
 const DRY = /^(Макароны|Рис|Гречка|Крупа|Овсян)/;
 const rawWord = n => (DRY.test(n) ? 'сухого' : 'сырого');
 const cookables = () => [...new Set(PLAN.days.flatMap(d => d.meals.flatMap(m => m.items.map(it => it.n))).filter(n => COOK.test(n)))];
