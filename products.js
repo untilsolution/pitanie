@@ -6,10 +6,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 23.6,
+"f": 2,
+"c": 0.5,
+"k": 113
 },
 {
 "cat": "Мясо и птица",
@@ -18,10 +18,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 20,
+"f": 9.1,
+"c": 0,
+"k": 160
 },
 {
 "cat": "Мясо и птица",
@@ -30,10 +30,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 19,
+"f": 10,
+"c": 0,
+"k": 160
 },
 {
 "cat": "Мясо и птица",
@@ -42,10 +42,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 16,
+"f": 18,
+"c": 0,
+"k": 230
 },
 {
 "cat": "Мясо и птица",
@@ -54,10 +54,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 18,
+"f": 5,
+"c": 0,
+"k": 119
 },
 {
 "cat": "Мясо и птица",
@@ -66,10 +66,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 23.1,
+"f": 3.6,
+"c": 13.6,
+"k": 186.6
 },
 {
 "cat": "Мясо и птица",
@@ -78,10 +78,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 23.6,
+"f": 2,
+"c": 0.5,
+"k": 113
 },
 {
 "cat": "Мясо и птица",
@@ -90,10 +90,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 19,
+"f": 11,
+"c": 0,
+"k": 175
 },
 {
 "cat": "Мясо и птица",
@@ -102,10 +102,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 23.1,
+"f": 3.6,
+"c": 13.6,
+"k": 186.6
 },
 {
 "cat": "Колбасные изделия",
@@ -114,10 +114,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 11,
+"f": 2,
+"c": 6,
+"k": 90
 },
 {
 "cat": "Колбасные изделия",
@@ -126,10 +126,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 22,
+"f": 20,
+"c": 0,
+"k": 282
 },
 {
 "cat": "Колбасные изделия",
@@ -138,10 +138,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 15.7,
+"f": 11.3,
+"c": 3.7,
+"k": 179
 },
 {
 "cat": "Колбасные изделия",
@@ -150,10 +150,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 18.1,
+"f": 5.6,
+"c": 1.5,
+"k": 129
 },
 {
 "cat": "Колбасные изделия",
@@ -162,10 +162,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 11,
+"f": 13,
+"c": 0,
+"k": 160
 },
 {
 "cat": "Колбасные изделия",
@@ -174,10 +174,10 @@ window.PRODUCTS = [
 "freq": "Редко",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 24,
+"f": 32,
+"c": 0,
+"k": 440
 },
 {
 "cat": "Рыба",
@@ -186,10 +186,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 20,
+"f": 10,
+"c": 6.67,
+"k": 186.67
 },
 {
 "cat": "Рыба",
@@ -198,10 +198,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 16.2,
+"f": 0.4,
+"c": 0.8,
+"k": 72.7
 },
 {
 "cat": "Яйца",
@@ -210,10 +210,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 1,
 "u": "шт",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 6,
+"f": 6,
+"c": 0.5,
+"k": 79.5
 },
 {
 "cat": "Яйца",
@@ -222,10 +222,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 11.07,
+"f": 0.2,
+"c": 0.7,
+"k": 52
 },
 {
 "cat": "Молочное",
@@ -234,10 +234,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "мл",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 3,
+"f": 2.5,
+"c": 4.7,
+"k": 53
 },
 {
 "cat": "Молочное",
@@ -246,10 +246,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "мл",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 3,
+"f": 1.5,
+"c": 4,
+"k": 42
 },
 {
 "cat": "Молочное",
@@ -258,10 +258,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "мл",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 2.9,
+"f": 3.2,
+"c": 4.25,
+"k": 58.5
 },
 {
 "cat": "Молочное",
@@ -270,10 +270,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 8,
+"f": 2,
+"c": 4.2,
+"k": 67
 },
 {
 "cat": "Молочное",
@@ -282,10 +282,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 1,
 "u": "порция",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 7.8,
+"f": 6.7,
+"c": 16.1,
+"k": 154
 },
 {
 "cat": "Молочное",
@@ -294,10 +294,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 16,
+"f": 5,
+"c": 3,
+"k": 121
 },
 {
 "cat": "Молочное",
@@ -306,10 +306,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 18,
+"f": 0.6,
+"c": 3.3,
+"k": 90
 },
 {
 "cat": "Молочное",
@@ -318,10 +318,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 15.9,
+"f": 1.92,
+"c": 12.33,
+"k": 131.8
 },
 {
 "cat": "Молочное",
@@ -330,10 +330,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 2.72,
+"f": 15,
+"c": 3.6,
+"k": 160
 },
 {
 "cat": "Молочное",
@@ -342,10 +342,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 1,
 "u": "шт",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 4,
+"f": 13,
+"c": 17,
+"k": 205
 },
 {
 "cat": "Молочное",
@@ -354,10 +354,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 16,
+"f": 5,
+"c": 3,
+"k": 121
 },
 {
 "cat": "Молочное",
@@ -366,10 +366,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 1,
 "u": "кусок",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 19,
+"f": 9.5,
+"c": 10.4,
+"k": 202.3
 },
 {
 "cat": "Сыр",
@@ -378,10 +378,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 26,
+"f": 28,
+"c": 0.6,
+"k": 348
 },
 {
 "cat": "Сыр",
@@ -390,10 +390,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 32.4,
+"f": 9.6,
+"c": 0,
+"k": 216
 },
 {
 "cat": "Сыр",
@@ -402,10 +402,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 32.5,
+"f": 9.6,
+"c": 0,
+"k": 216.4
 },
 {
 "cat": "Сыр",
@@ -414,10 +414,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 26,
+"f": 28,
+"c": 0.3,
+"k": 348
 },
 {
 "cat": "Крупы и макароны",
@@ -426,10 +426,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 13,
+"f": 1.5,
+"c": 72,
+"k": 350
 },
 {
 "cat": "Крупы и макароны",
@@ -438,10 +438,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 7,
+"f": 1,
+"c": 71.4,
+"k": 330
 },
 {
 "cat": "Крупы и макароны",
@@ -450,10 +450,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 12.6,
+"f": 3.3,
+"c": 62.1,
+"k": 310
 },
 {
 "cat": "Крупы и макароны",
@@ -462,10 +462,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 12.8,
+"f": 5.4,
+"c": 69.7,
+"k": 367
 },
 {
 "cat": "Крупы и макароны",
@@ -474,10 +474,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 7.8,
+"f": 14.3,
+"c": 65.3,
+"k": 435
 },
 {
 "cat": "Крупы и макароны",
@@ -486,10 +486,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 6.8,
+"f": 1.1,
+"c": 82.1,
+"k": 374
 },
 {
 "cat": "Крупы и макароны",
@@ -498,10 +498,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 8.1,
+"f": 1.5,
+"c": 78.7,
+"k": 373
 },
 {
 "cat": "Крупы и макароны",
@@ -510,10 +510,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 9.9,
+"f": 12.9,
+"c": 68.1,
+"k": 439
 },
 {
 "cat": "Крупы и макароны",
@@ -522,10 +522,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 11,
+"f": 13,
+"c": 64,
+"k": 420
 },
 {
 "cat": "Хлеб и выпечка",
@@ -534,10 +534,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 7.4,
+"f": 0.8,
+"c": 50,
+"k": 242
 },
 {
 "cat": "Хлеб и выпечка",
@@ -546,10 +546,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 6,
+"f": 3.5,
+"c": 42,
+"k": 227
 },
 {
 "cat": "Хлеб и выпечка",
@@ -558,10 +558,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 9,
+"f": 1.2,
+"c": 54,
+"k": 264
 },
 {
 "cat": "Хлеб и выпечка",
@@ -570,10 +570,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 5.6,
+"f": 28,
+"c": 43,
+"k": 449
 },
 {
 "cat": "Овощи и фрукты",
@@ -582,10 +582,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 1,
+"f": 1,
+"c": 20,
+"k": 89
 },
 {
 "cat": "Овощи и фрукты",
@@ -594,10 +594,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 2,
+"f": 0.4,
+"c": 16.3,
+"k": 77
 },
 {
 "cat": "Овощи и фрукты",
@@ -606,10 +606,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 2,
+"f": 1.5,
+"c": 14,
+"k": 77.8
 },
 {
 "cat": "Овощи и фрукты",
@@ -618,10 +618,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 0.4,
+"f": 0.4,
+"c": 9.8,
+"k": 47
 },
 {
 "cat": "Овощи и фрукты",
@@ -630,10 +630,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 1,
+"f": 0.6,
+"c": 10.3,
+"k": 61
 },
 {
 "cat": "Овощи и фрукты",
@@ -642,10 +642,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 0.9,
+"f": 0.2,
+"c": 8.1,
+"k": 43
 },
 {
 "cat": "Овощи и фрукты",
@@ -654,10 +654,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 0.8,
+"f": 0.2,
+"c": 7.5,
+"k": 38
 },
 {
 "cat": "Овощи и фрукты",
@@ -666,10 +666,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 0.8,
+"f": 0.3,
+"c": 9.6,
+"k": 46
 },
 {
 "cat": "Орехи и сухофрукты",
@@ -678,10 +678,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 16,
+"f": 58,
+"c": 18,
+"k": 660
 },
 {
 "cat": "Орехи и сухофрукты",
@@ -690,10 +690,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 5.2,
+"f": 0.3,
+"c": 51,
+"k": 215
 },
 {
 "cat": "Орехи и сухофрукты",
@@ -702,10 +702,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 21,
+"f": 50,
+"c": 22,
+"k": 579
 },
 {
 "cat": "Орехи и сухофрукты",
@@ -714,10 +714,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 15,
+"f": 61.5,
+"c": 9.4,
+"k": 651
 },
 {
 "cat": "Орехи и сухофрукты",
@@ -726,10 +726,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 16,
+"f": 66,
+"c": 9,
+"k": 704
 },
 {
 "cat": "Соусы",
@@ -738,10 +738,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 1.5,
+"f": 43,
+"c": 12,
+"k": 450
 },
 {
 "cat": "Соусы",
@@ -750,10 +750,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 0.5,
+"f": 82.5,
+"c": 0.8,
+"k": 748
 },
 {
 "cat": "Соусы",
@@ -762,10 +762,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 1,
+"f": 0.1,
+"c": 23,
+"k": 95
 },
 {
 "cat": "Соусы",
@@ -774,10 +774,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 9,
+"f": 11,
+"c": 20,
+"k": 220
 },
 {
 "cat": "Соусы",
@@ -786,10 +786,10 @@ window.PRODUCTS = [
 "freq": "Редко",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 0.3,
+"f": 67,
+"c": 2.5,
+"k": 620
 },
 {
 "cat": "Соусы",
@@ -798,10 +798,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 1.2,
+"f": 0,
+"c": 32,
+"k": 150
 },
 {
 "cat": "Соусы",
@@ -810,10 +810,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 1.2,
+"f": 0,
+"c": 32,
+"k": 150
 },
 {
 "cat": "Соусы",
@@ -822,10 +822,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 1.2,
+"f": 0,
+"c": 32,
+"k": 150
 },
 {
 "cat": "Сладкое",
@@ -834,10 +834,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 4.5,
+"f": 18,
+"c": 63,
+"k": 430
 },
 {
 "cat": "Сладкое",
@@ -846,10 +846,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 5.8,
+"f": 20,
+"c": 58,
+"k": 550
 },
 {
 "cat": "Сладкое",
@@ -858,10 +858,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 5,
+"f": 6,
+"c": 73,
+"k": 370
 },
 {
 "cat": "Сладкое",
@@ -870,10 +870,10 @@ window.PRODUCTS = [
 "freq": "Редко",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 0,
+"f": 0,
+"c": 84,
+"k": 332
 },
 {
 "cat": "Сладкое",
@@ -882,10 +882,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 0,
+"f": 0,
+"c": 80,
+"k": 320
 },
 {
 "cat": "Сладкое",
@@ -894,10 +894,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 0,
+"f": 0,
+"c": 80,
+"k": 320
 },
 {
 "cat": "Сладкое",
@@ -906,10 +906,10 @@ window.PRODUCTS = [
 "freq": "Редко",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 0,
+"f": 0,
+"c": 80,
+"k": 320
 },
 {
 "cat": "Сладкое",
@@ -918,10 +918,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 3.5,
+"f": 17,
+"c": 20,
+"k": 243
 },
 {
 "cat": "Сладкое",
@@ -930,10 +930,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 6.5,
+"f": 8.5,
+"c": 55,
+"k": 320
 },
 {
 "cat": "Сладкое",
@@ -942,10 +942,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 7,
+"f": 8.5,
+"c": 56,
+"k": 330
 },
 {
 "cat": "Сладкое",
@@ -954,10 +954,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 6.5,
+"f": 30,
+"c": 59,
+"k": 540
 },
 {
 "cat": "Спортпит",
@@ -966,10 +966,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 69.33,
+"f": 6.33,
+"c": 6,
+"k": 356.67
 },
 {
 "cat": "Спортпит",
@@ -978,10 +978,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 78,
+"f": 2,
+"c": 6,
+"k": 358
 },
 {
 "cat": "Спортпит",
@@ -990,10 +990,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 20,
+"f": 2.6,
+"c": 65.5,
+"k": 365
 },
 {
 "cat": "Напитки и добавки",
@@ -1002,10 +1002,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "мл",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 2.67,
+"f": 1.67,
+"c": 6.67,
+"k": 56.67
 },
 {
 "cat": "Напитки и добавки",
@@ -1014,10 +1014,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "мл",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 1.5,
+"f": 1.25,
+"c": 2.35,
+"k": 26.5
 },
 {
 "cat": "Напитки и добавки",
@@ -1026,10 +1026,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 0,
+"f": 0,
+"c": 100,
+"k": 400
 },
 {
 "cat": "Напитки и добавки",
@@ -1038,10 +1038,10 @@ window.PRODUCTS = [
 "freq": "Постоянно",
 "base": 100,
 "u": "мл",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 0,
+"f": 0,
+"c": 75,
+"k": 300
 },
 {
 "cat": "Напитки и добавки",
@@ -1050,10 +1050,10 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 2.9,
+"f": 0.1,
+"c": 7.3,
+"k": 42
 },
 {
 "cat": "Напитки и добавки",
@@ -1062,9 +1062,9 @@ window.PRODUCTS = [
 "freq": "",
 "base": 100,
 "u": "г",
-"p": null,
-"f": null,
-"c": null,
-"k": null
+"p": 15,
+"f": 3,
+"c": 14,
+"k": 130
 }
 ];
