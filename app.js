@@ -36,7 +36,7 @@ let sharedMemory = {};
 function loadShared() {
   try { return JSON.parse(localStorage.getItem(SHARED)) || {}; } catch (e) { return sharedMemory; }
 }
-const shared = Object.assign({ yield: {}, vessels: [] }, loadShared());
+const shared = Object.assign({ yield: {}, vessels: [], myfoods: [] }, loadShared());
 function saveShared() {
   sharedMemory = shared;
   try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
@@ -59,8 +59,17 @@ const extrasOf = d => state.extras[d] || [];
 const READY_FOOD = [
   { cat: 'Готовая еда', n: 'Шаурма с курицей', brand: '', freq: '', base: 100, u: 'г', p: 8.5, f: 8, c: 22, k: 190, start: 350 },
   { cat: 'Готовая еда', n: 'Картофель фри', brand: '', freq: '', base: 100, u: 'г', p: 3, f: 15, c: 40, k: 310, start: 100 },
+  { cat: 'Готовая еда', n: 'Сухарики к пиву', brand: '', freq: '', base: 100, u: 'г', p: 10.1, f: 8.4, c: 67.7, k: 386, start: 50 },
+  { cat: 'Готовая еда', n: 'Щёчки судака сушёные', brand: '', freq: '', base: 100, u: 'г', p: 55, f: 3, c: 0, k: 250, start: 75 },
 ];
-const PRODUCTS = [...(window.PRODUCTS || []), ...READY_FOOD].sort((x, y) => x.n.localeCompare(y.n, 'ru'));
+// The product list: the table, ready-made food and the dishes the user saved. Rebuilt in place when "my dishes" change.
+const PRODUCTS = [];
+function rebuildProducts() {
+  const mine = (shared.myfoods || []).map(p => ({ ...p, cat: 'Мои блюда', brand: '', freq: '', mine: true }));
+  PRODUCTS.length = 0;
+  PRODUCTS.push(...[...(window.PRODUCTS || []), ...READY_FOOD, ...mine].sort((x, y) => x.n.localeCompare(y.n, 'ru')));
+}
+rebuildProducts();
 const SWAPPABLE = /^(Мармелад|Чокопай|Шоколад|Зефир|Мёд|Джем|Пряники|Пломбир|Печенье|Банан|Яблоко|Киви|Апельсин|Мандарин|Слива|Грецкий|Миндаль|Фундук|Кедровые|Курага)/;
 const SWAP_CATS = ['Сладкое', 'Овощи и фрукты', 'Орехи и сухофрукты'];
 const label = p => p.n + (p.brand ? `, ${p.brand}` : '');
@@ -206,7 +215,7 @@ function sheetList() {
   }
   const q = sheet.q.toLowerCase();
   return PRODUCTS.map((p, i) => ({ p, i })).filter(o => label(o.p).toLowerCase().includes(q)).map(o =>
-    `<button type="button" class="pick" data-act="pickextra" data-i="${o.i}"><b>${esc(label(o.p))}</b>
+    `<button type="button" class="pick" data-act="pickextra" data-i="${o.i}"><b>${esc(label(o.p))}${o.p.mine ? ' <em>моё</em>' : ''}</b>
       <small>на ${o.p.base} ${o.p.u}: ${whole(o.p.k)} ккал · Б ${num(o.p.p)} Ж ${num(o.p.f)} У ${num(o.p.c)}</small></button>`).join('') || '<p class="sub">В таблице нет. Нажми «Найти в интернете».</p>';
 }
 function webList() {
@@ -287,7 +296,8 @@ function renderSheet() {
       <label class="field"><span>Сколько съел</span><input type="number" inputmode="decimal" min="0" id="xAmount" value="${start}" data-act="xamount" aria-label="Количество"><span>${esc(p.u)}</span></label>
       <p class="sub" id="xInfo"></p>
       <button type="button" class="btn small" data-act="addpicked">Добавить</button>
-      <button type="button" class="btn ghost small" data-act="backpick">Другой продукт</button>`;
+      <button type="button" class="btn ghost small" data-act="backpick">Другой продукт</button>
+      ${p.mine ? '<button type="button" class="btn ghost small" data-act="delmyfood">Убрать из моих блюд</button>' : ''}`;
     s.innerHTML = sheetFrame(title, body);
     pickInfo();
     return;
@@ -300,6 +310,7 @@ function renderSheet() {
         <button type="button" data-act="cmode" data-m="all" aria-pressed="false">БЖУ на всю порцию</button>
       </div>
       ${macroInputs()}
+      <label class="check"><input type="checkbox" id="cRemember" checked data-act="calcinput"><span>Запомнить в моих блюдах</span></label>
       <button type="button" class="btn small" data-act="addcustom">Добавить блюдо</button></details>` : '';
   const web = sheet.mode === 'extra' ? '<button type="button" class="btn ghost small webbtn" data-act="websearch">Найти в интернете</button><div id="webBox"></div>' : '';
   s.innerHTML = sheetFrame(title, `${body}
@@ -491,9 +502,24 @@ document.addEventListener('click', e => {
     const per100 = document.querySelector('.cmode .on').dataset.m === '100';
     if (!n || !v.k) { toast('Впиши название и калории'); return; }
     if (per100 && g <= 0) { toast('Впиши, сколько граммов съел'); return; }
-    const x = g > 0 ? portionOf({ n, brand: '', base: per100 ? 100 : g, u: 'г', ...v }, g) : { n, a: 0, u: '', ...v, fb: 0 };
-    addExtra(x);
+    const base = g > 0 ? { n, base: per100 ? 100 : g, u: 'г', ...v, start: g } : { n, base: 1, u: 'порция', ...v, start: 1 };
+    if ($('cRemember').checked) {
+      shared.myfoods = (shared.myfoods || []).filter(p => p.n.toLowerCase() !== n.toLowerCase()).concat(base);
+      saveShared();
+      rebuildProducts();
+    }
+    addExtra(portionOf({ ...base, brand: '' }, base.start));
     render();
+    return;
+  }
+  if (act === 'delmyfood') {
+    if (!confirm('Убрать это блюдо из списка? Уже добавленные записи останутся.')) return;
+    const n = sheet.pick.n;
+    shared.myfoods = (shared.myfoods || []).filter(p => p.n !== n);
+    saveShared();
+    rebuildProducts();
+    sheet.pick = null;
+    renderSheet();
     return;
   }
   if (act === 'editextra') { sheet = { mode: 'editextra', i: +el.dataset.i, q: '' }; renderSheet(); return; }

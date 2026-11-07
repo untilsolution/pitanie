@@ -46,7 +46,7 @@ window.Sync = (() => {
   function body() {
     return {
       plan: PLAN.id, eaten: state.eaten, swaps: state.swaps, extras: state.extras,
-      yield: shared.yield, vessels: shared.vessels,
+      yield: shared.yield, vessels: shared.vessels, myfoods: shared.myfoods || [],
       days: PLAN.days.map((day, d) => ({ title: day.title, text: marked(d) ? dayText(d) : null })),
     };
   }
@@ -67,6 +67,11 @@ window.Sync = (() => {
     if (plain(data.yield)) shared.yield = data.yield;
     if (Array.isArray(data.vessels)) {
       shared.vessels = data.vessels.map(v => ({ n: String(v.n), w: Number(v.w) || 0, ...(/^data:image\/jpeg;base64,[\w+/=]+$/.test(v.photo || '') ? { photo: v.photo } : {}) }));
+    }
+    if (Array.isArray(data.myfoods)) {
+      const n = x => Number(x) || 0;
+      shared.myfoods = data.myfoods.filter(p => p && p.n).map(p => ({ n: String(p.n), base: n(p.base) || 1, u: String(p.u || 'г'), p: n(p.p), f: n(p.f), c: n(p.c), k: n(p.k), start: n(p.start) || 1 }));
+      rebuildProducts();
     }
     me.at = data.updated || me.at;
   }
