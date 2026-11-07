@@ -47,11 +47,11 @@ function saveShared() {
 }
 const COOK = /^(Пюре|Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты)/;
 const DRY = /^(Макароны|Рис|Гречка|Крупа|Овсян)/;
-// Mash is planned in finished grams, so its yield only shows how much water boiled off, it never rescales portions.
+// Mash is planned by the weight of its raw ingredients, like pasta and meat.
 const MASH = /^Пюре/;
 const rawWord = n => (DRY.test(n) ? 'сухого' : MASH.test(n) ? 'продуктов' : 'сырого');
 const cookables = () => [...new Set(PLAN.days.flatMap(d => d.meals.flatMap(m => m.items.map(it => it.n))).filter(n => COOK.test(n)))];
-const cookedOf = (it, raw) => (shared.yield[it.n] && !MASH.test(it.n) ? Math.round(raw * shared.yield[it.n] / 100) : null);
+const cookedOf = (it, raw) => (shared.yield[it.n] ? Math.round(raw * shared.yield[it.n] / 100) : null);
 
 const $ = id => document.getElementById(id);
 const num = x => (Math.round(x * 10) / 10).toString().replace('.', ',');
