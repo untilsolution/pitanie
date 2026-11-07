@@ -46,7 +46,7 @@ window.Sync = (() => {
   function body() {
     return {
       plan: PLAN.id, eaten: state.eaten, swaps: state.swaps, extras: state.extras,
-      yield: shared.yield, vessels: shared.vessels, myfoods: shared.myfoods || [], raw: shared.raw || {},
+      yield: shared.yield, vessels: shared.vessels, myfoods: shared.myfoods || [], raw: shared.raw || {}, yieldAt: shared.yieldAt || {},
       days: PLAN.days.map((day, d) => ({ title: day.title, text: marked(d) ? dayText(d) : null })),
     };
   }
@@ -66,6 +66,7 @@ window.Sync = (() => {
     for (const k of ['eaten', 'swaps', 'extras']) if (plain(data[k])) state[k] = data[k];
     if (plain(data.yield)) shared.yield = data.yield;
     if (plain(data.raw)) shared.raw = data.raw;
+    if (plain(data.yieldAt)) shared.yieldAt = data.yieldAt;
     if (Array.isArray(data.vessels)) {
       const jpeg = p => /^data:image\/jpeg;base64,[\w+/=]+$/.test(p || '');
       shared.vessels = data.vessels.map(v => ({ n: String(v.n), w: Number(v.w) || 0, ...(typeof v.cat === 'string' ? { cat: v.cat } : {}), ...(jpeg(v.photo) ? { photo: v.photo } : {}), ...(jpeg(v.big) ? { big: v.big } : {}) }));

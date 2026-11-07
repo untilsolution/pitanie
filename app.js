@@ -39,7 +39,7 @@ let sharedMemory = {};
 function loadShared() {
   try { return JSON.parse(localStorage.getItem(SHARED)) || {}; } catch (e) { return sharedMemory; }
 }
-const shared = Object.assign({ yield: {}, vessels: [], myfoods: [], raw: {} }, loadShared());
+const shared = Object.assign({ yield: {}, yieldAt: {}, vessels: [], myfoods: [], raw: {} }, loadShared());
 function saveShared() {
   sharedMemory = shared;
   try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
@@ -396,6 +396,9 @@ const vcatOf = v => (VCATS.includes(v.cat) ? v.cat
   : /кастрюл|сотейник|казан/i.test(v.n) ? 'Кастрюли' : /сковород/i.test(v.n) ? 'Сковородки' : /тарел|миск/i.test(v.n) ? 'Тарелки' : 'Другое');
 const SIDE = /^(Макароны|Рис|Гречка|Пюре|Крупа|Овсян|Картофель|Булгур|Кускус)/;
 const gramsOpen = {};
+let rawEdit = null;
+// In the weights tab a dish is just «Макароны», not «Макароны (сухие)».
+const dishName = n => n.replace(/ \((сухие|сухой|сухая)\)$/, '');
 const shortDate = iso => new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
 
 function renderGrams() {
@@ -410,16 +413,19 @@ function renderGrams() {
     </div>
     <label class="field vcustom" hidden><span>Вес этой посуды</span><input type="number" inputmode="numeric" min="1" data-f="vcustom" data-act="calcinput" aria-label="Вес посуды, г"><span>г</span></label>`;
   const card = n => {
-    const y = shared.yield[n], raw = (shared.raw || {})[n], word = DRY.test(n) ? 'Сухой' : 'Сырой';
+    const y = shared.yield[n], at = (shared.yieldAt || {})[n], raw = (shared.raw || {})[n];
+    const before = DRY.test(n) ? 'до варки' : 'до готовки';
+    const rawLine = rawEdit === n
+      ? `<label class="rawedit"><span>Вес ${before}</span><input type="number" inputmode="numeric" min="1" value="${raw ? raw.g : ''}" data-act="rawsave" data-name="${esc(n)}" aria-label="${esc(dishName(n))}: вес ${before}, г"><span>г</span></label>`
+      : `<button type="button" class="rawbtn" data-act="rawedit" data-name="${esc(n)}">${raw ? `Вес ${before}: ${raw.g} г · ${shortDate(raw.at)}` : `+ Записать вес ${before}`}</button>`;
     return `<section class="card cook" data-name="${esc(n)}">
-      <h2>${esc(n)}</h2>
-      <label class="field"><span>Из 100 г ${rawWord(n)} выходит</span>
-        <input type="number" inputmode="numeric" min="1" value="${y || ''}" placeholder="—" data-act="yield" data-name="${esc(n)}" aria-label="${esc(n)}: вес готового из 100 г ${rawWord(n)}"><span>г</span></label>
-      <label class="field"><span>${word} вес партии${raw ? `<small class="note">записано ${shortDate(raw.at)}</small>` : ''}</span>
-        <input type="number" inputmode="numeric" min="1" value="${raw ? raw.g : ''}" placeholder="—" data-act="rawsave" data-name="${esc(n)}" aria-label="${esc(n)}: ${word.toLowerCase()} вес партии, г"><span>г</span></label>
+      <h2>${esc(dishName(n))}</h2>
+      <label class="field"><span>Вес готового продукта<small class="note">из 100 г ${rawWord(n)}${y && at ? ` · обновлено ${shortDate(at)}` : ''}</small></span>
+        <input type="number" inputmode="numeric" min="1" value="${y || ''}" placeholder="—" data-act="yield" data-name="${esc(n)}" aria-label="${esc(dishName(n))}: вес готового из 100 г ${rawWord(n)}"><span>г</span></label>
+      ${rawLine}
       <details><summary>Посчитать по весам</summary>
-        <label class="field"><span>${word} вес всего</span><input type="number" inputmode="numeric" min="1" value="${raw ? raw.g : ''}" data-f="raw" data-act="calcinput" aria-label="${word} вес, г"><span>г</span></label>
-        <label class="field"><span>На весах вместе с посудой</span><input type="number" inputmode="numeric" min="1" data-f="scale" data-act="calcinput" aria-label="Вес на весах, г"><span>г</span></label>
+        <label class="field"><span>Вес продукта ${before}</span><input type="number" inputmode="numeric" min="1" value="${raw ? raw.g : ''}" data-f="raw" data-act="calcinput" aria-label="Вес продукта ${before}, г"><span>г</span></label>
+        <label class="field"><span>Вес готового вместе с посудой</span><input type="number" inputmode="numeric" min="1" data-f="scale" data-act="calcinput" aria-label="Вес готового вместе с посудой, г"><span>г</span></label>
         ${vesselPick}
         <button type="button" class="btn small" data-act="calc">Посчитать</button>
       </details>
@@ -429,7 +435,7 @@ function renderGrams() {
   const all = cookables();
   const group = (key, title, names) => {
     if (!names.length) return '';
-    const brief = names.map(n => `${n.replace(/ \(.*\)$/, '').replace(/,.*$/, '')}${shared.yield[n] ? ` ${shared.yield[n]} г` : ''}`).join(' · ');
+    const brief = names.map(n => `${dishName(n).replace(/,.*$/, '')}${shared.yield[n] ? ` ${shared.yield[n]} г` : ''}`).join(' · ');
     return `<details class="group" data-group="${key}"${gramsOpen[key] ? ' open' : ''}>
       <summary><span><b>${title}</b><small>${esc(brief)}</small></span></summary>${names.map(card).join('')}</details>`;
   };
@@ -539,6 +545,13 @@ document.addEventListener('click', e => {
     if (el.dataset.custom) custom.querySelector('input').focus();
     return;
   }
+  if (act === 'rawedit') {
+    rawEdit = el.dataset.name;
+    render();
+    const box = document.querySelector('.rawedit input');
+    if (box) box.focus();
+    return;
+  }
   if (act === 'vfilter') {
     const card = el.closest('.cook'), cat = el.dataset.cat;
     el.parentNode.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === el));
@@ -642,10 +655,12 @@ document.addEventListener('click', e => {
     shared.raw = shared.raw || {};
     shared.raw[card.dataset.name] = { g: val('raw'), at: new Date().toISOString() };
     shared.yield[card.dataset.name] = Math.round(net / val('raw') * 100);
+    (shared.yieldAt = shared.yieldAt || {})[card.dataset.name] = new Date().toISOString();
     saveShared();
-    toast(`Готового всего ${net} г, из 100 г ${rawWord(card.dataset.name)} ${shared.yield[card.dataset.name]} г`);
+    toast(`Готового всего ${net} г, это ${shared.yield[card.dataset.name]} г из 100 г ${rawWord(card.dataset.name)}`);
   } else if (act === 'clearyield') {
     delete shared.yield[el.dataset.name];
+    if (shared.yieldAt) delete shared.yieldAt[el.dataset.name];
     if (shared.raw) delete shared.raw[el.dataset.name];
     saveShared();
   } else if (act === 'addvessel') {
@@ -689,12 +704,15 @@ document.addEventListener('change', e => {
     const g = Math.round(Number(t.value) || 0);
     shared.raw = shared.raw || {};
     if (g > 0) shared.raw[t.dataset.name] = { g, at: new Date().toISOString() }; else delete shared.raw[t.dataset.name];
+    rawEdit = null;
     saveShared();
     render();
   }
   if (act === 'yield') {
     const v = Math.round(Number(t.value) || 0);
-    if (v > 0) shared.yield[t.dataset.name] = v; else delete shared.yield[t.dataset.name];
+    shared.yieldAt = shared.yieldAt || {};
+    if (v > 0) { shared.yield[t.dataset.name] = v; shared.yieldAt[t.dataset.name] = new Date().toISOString(); }
+    else { delete shared.yield[t.dataset.name]; delete shared.yieldAt[t.dataset.name]; }
     saveShared();
     render();
   }
