@@ -39,7 +39,7 @@ let sharedMemory = {};
 function loadShared() {
   try { return JSON.parse(localStorage.getItem(SHARED)) || {}; } catch (e) { return sharedMemory; }
 }
-const shared = Object.assign({ yield: {}, vessels: [], myfoods: [] }, loadShared());
+const shared = Object.assign({ yield: {}, vessels: [], myfoods: [], raw: {} }, loadShared());
 function saveShared() {
   sharedMemory = shared;
   try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
@@ -390,36 +390,66 @@ function renderShop() {
     <section class="card">${rows}</section>`;
 }
 
+// Cookware groups, and which dishes count as a side.
+const VCATS = ['Кастрюли', 'Сковородки', 'Тарелки', 'Другое'];
+const vcatOf = v => (VCATS.includes(v.cat) ? v.cat
+  : /кастрюл|сотейник|казан/i.test(v.n) ? 'Кастрюли' : /сковород/i.test(v.n) ? 'Сковородки' : /тарел|миск/i.test(v.n) ? 'Тарелки' : 'Другое');
+const SIDE = /^(Макароны|Рис|Гречка|Пюре|Крупа|Овсян|Картофель|Булгур|Кускус)/;
+const gramsOpen = {};
+const shortDate = iso => new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
+
 function renderGrams() {
   const thumb = v => (v.photo ? `<img src="${v.photo}" alt="">` : '');
-  const vesselPick = '<button type="button" class="vp on" data-act="pickv" data-w="0"><small>Без посуды</small></button>'
-    + shared.vessels.map(v => `<button type="button" class="vp" data-act="pickv" data-w="${v.w}">${thumb(v)}<small>${esc(v.n)}<br>${v.w} г</small></button>`).join('');
-  const cards = cookables().map(n => {
-    const y = shared.yield[n];
+  const cats = VCATS.filter(c => shared.vessels.some(v => vcatOf(v) === c));
+  const vesselPick = `${cats.length > 1 ? `<div class="chips vfilter" role="group" aria-label="Тип посуды">
+      <button type="button" class="on" data-act="vfilter" data-cat="">Вся</button>${cats.map(c => `<button type="button" data-act="vfilter" data-cat="${c}">${c}</button>`).join('')}</div>` : ''}
+    <div class="vpick" role="group" aria-label="Посуда">
+      <button type="button" class="vp on" data-act="pickv" data-w="0"><small>Без посуды</small></button>
+      ${shared.vessels.map(v => `<button type="button" class="vp" data-act="pickv" data-w="${v.w}" data-cat="${vcatOf(v)}">${thumb(v)}<small>${esc(v.n)}<br>${v.w} г</small></button>`).join('')}
+      <button type="button" class="vp" data-act="pickv" data-custom="1"><small>Своя посуда</small></button>
+    </div>
+    <label class="field vcustom" hidden><span>Вес этой посуды</span><input type="number" inputmode="numeric" min="1" data-f="vcustom" data-act="calcinput" aria-label="Вес посуды, г"><span>г</span></label>`;
+  const card = n => {
+    const y = shared.yield[n], raw = (shared.raw || {})[n], word = DRY.test(n) ? 'Сухой' : 'Сырой';
     return `<section class="card cook" data-name="${esc(n)}">
       <h2>${esc(n)}</h2>
       <label class="field"><span>Из 100 г ${rawWord(n)} выходит</span>
         <input type="number" inputmode="numeric" min="1" value="${y || ''}" placeholder="—" data-act="yield" data-name="${esc(n)}" aria-label="${esc(n)}: вес готового из 100 г ${rawWord(n)}"><span>г</span></label>
+      <label class="field"><span>${word} вес партии${raw ? `<small class="note">записано ${shortDate(raw.at)}</small>` : ''}</span>
+        <input type="number" inputmode="numeric" min="1" value="${raw ? raw.g : ''}" placeholder="—" data-act="rawsave" data-name="${esc(n)}" aria-label="${esc(n)}: ${word.toLowerCase()} вес партии, г"><span>г</span></label>
       <details><summary>Посчитать по весам</summary>
-        <label class="field"><span>${DRY.test(n) ? 'Сухой' : 'Сырой'} вес всего</span><input type="number" inputmode="numeric" min="1" data-f="raw" data-act="calcinput" aria-label="${DRY.test(n) ? 'Сухой' : 'Сырой'} вес, г"><span>г</span></label>
+        <label class="field"><span>${word} вес всего</span><input type="number" inputmode="numeric" min="1" value="${raw ? raw.g : ''}" data-f="raw" data-act="calcinput" aria-label="${word} вес, г"><span>г</span></label>
         <label class="field"><span>На весах вместе с посудой</span><input type="number" inputmode="numeric" min="1" data-f="scale" data-act="calcinput" aria-label="Вес на весах, г"><span>г</span></label>
-        <div class="vpick" role="group" aria-label="Посуда">${vesselPick}</div>
+        ${vesselPick}
         <button type="button" class="btn small" data-act="calc">Посчитать</button>
       </details>
-      ${y ? `<button type="button" class="btn ghost small" data-act="clearyield" data-name="${esc(n)}">Стереть, сварю новые</button>` : ''}
+      ${y || raw ? `<button type="button" class="btn ghost small" data-act="clearyield" data-name="${esc(n)}">Стереть, сварю новые</button>` : ''}
     </section>`;
-  }).join('');
+  };
+  const all = cookables();
+  const group = (key, title, names) => {
+    if (!names.length) return '';
+    const brief = names.map(n => `${n.replace(/ \(.*\)$/, '').replace(/,.*$/, '')}${shared.yield[n] ? ` ${shared.yield[n]} г` : ''}`).join(' · ');
+    return `<details class="group" data-group="${key}"${gramsOpen[key] ? ' open' : ''}>
+      <summary><span><b>${title}</b><small>${esc(brief)}</small></span></summary>${names.map(card).join('')}</details>`;
+  };
   const upload = (v, i, text) => `<label class="${text ? 'vreplace' : 'vthumb'}" aria-label="${text ? 'Заменить фото' : 'Добавить фото'}: ${esc(v.n)}">${text || '<i>Фото</i>'}<input type="file" accept="image/*" data-act="vphoto" data-i="${i}" hidden></label>`;
-  const vessels = shared.vessels.map((v, i) => `<div class="vessel">${v.photo
+  const row = (v, i) => `<div class="vessel">${v.photo
       ? `<button type="button" class="vthumb" data-act="viewphoto" data-i="${i}" aria-label="Открыть фото: ${esc(v.n)}"><img src="${v.photo}" alt=""></button>`
       : upload(v, i)}<span>${esc(v.n)}${v.photo ? `<br>${upload(v, i, 'Заменить фото')}` : ''}</span><b>${v.w} г</b>
-      <button type="button" data-act="delvessel" data-i="${i}" aria-label="Удалить: ${esc(v.n)}">Удалить</button></div>`).join('');
+      <button type="button" data-act="delvessel" data-i="${i}" aria-label="Удалить: ${esc(v.n)}">Удалить</button></div>`;
+  const vesselGroups = VCATS.map(c => {
+    const list = shared.vessels.map((v, i) => ({ v, i })).filter(o => vcatOf(o.v) === c);
+    return list.length ? `<h3 class="vcat">${c}</h3>${list.map(o => row(o.v, o.i)).join('')}` : '';
+  }).join('');
   $('main').innerHTML = `<h1>Граммовки</h1><p class="sub">Впиши, сколько выходит готового, и рацион сам покажет порции.</p>
-    ${cards}
+    ${group('side', 'Гарниры', all.filter(n => SIDE.test(n)))}
+    ${group('main', 'Мясо и основные блюда', all.filter(n => !SIDE.test(n)))}
     <h1>Посуда</h1><p class="sub">Вес кастрюль и тарелок хранится всегда, при смене плана не пропадает.</p>
     <section class="card cook">
-      ${vessels || '<p class="sub" style="margin:0 0 10px">Пока пусто.</p>'}
+      ${vesselGroups || '<p class="sub" style="margin:0 0 10px">Пока пусто.</p>'}
       <label class="field col"><span>Название</span><input type="text" id="vName" data-act="calcinput" placeholder="Большая кастрюля" aria-label="Название посуды"></label>
+      <label class="field col"><span>Тип</span><select id="vCat" data-act="calcinput" aria-label="Тип посуды">${VCATS.map(c => `<option>${c}</option>`).join('')}</select></label>
       <label class="field"><span>Вес</span><input type="number" inputmode="numeric" min="1" id="vWeight" data-act="calcinput" aria-label="Вес посуды, г"><span>г</span></label>
       <button type="button" class="btn small" data-act="addvessel">Добавить посуду</button>
     </section>`;
@@ -478,10 +508,10 @@ function dayText(d) {
 }
 
 // What a phone without a key may do: look around, nothing that changes the marks.
-const VIEWER_OK = new Set(['day', 'sync', 'closesheet', 'savekey', 'pickv', 'viewphoto', 'closephoto']);
+const VIEWER_OK = new Set(['day', 'sync', 'closesheet', 'savekey', 'pickv', 'vfilter', 'viewphoto', 'closephoto']);
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
-  if (!el || ['input', 'cookedinput', 'yield', 'calcinput', 'sheetsearch', 'xamount', 'vphoto'].includes(el.dataset.act)) return;
+  if (!el || ['input', 'cookedinput', 'yield', 'rawsave', 'calcinput', 'sheetsearch', 'xamount', 'vphoto'].includes(el.dataset.act)) return;
   const { act, id } = el.dataset;
   if (act === 'viewphoto') { openPhoto(shared.vessels[+el.dataset.i]); return; }
   if (act === 'closephoto') { document.querySelectorAll('.photoview').forEach(b => b.remove()); document.body.classList.remove('locked'); return; }
@@ -504,6 +534,15 @@ document.addEventListener('click', e => {
   }
   if (act === 'pickv') {
     el.closest('.vpick').querySelectorAll('.vp').forEach(b => b.classList.toggle('on', b === el));
+    const custom = el.closest('.cook').querySelector('.vcustom');
+    custom.hidden = !el.dataset.custom;
+    if (el.dataset.custom) custom.querySelector('input').focus();
+    return;
+  }
+  if (act === 'vfilter') {
+    const card = el.closest('.cook'), cat = el.dataset.cat;
+    el.parentNode.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === el));
+    card.querySelectorAll('.vp[data-cat]').forEach(b => { b.hidden = !!cat && b.dataset.cat !== cat; });
     return;
   }
   if (act === 'extra') { sheet = { mode: 'extra', q: '' }; renderSheet(); return; }
@@ -596,18 +635,23 @@ document.addEventListener('click', e => {
     if (window.Sync) Sync.shop(n, bought);
   } else if (act === 'calc') {
     const card = el.closest('.cook'), val = f => Number(card.querySelector(`[data-f=${f}]`).value) || 0;
-    const net = val('scale') - Number(card.querySelector('.vp.on').dataset.w);
+    const picked = card.querySelector('.vp.on'), tare = picked.dataset.custom ? val('vcustom') : Number(picked.dataset.w);
+    if (picked.dataset.custom && tare <= 0) { toast('Впиши вес своей посуды'); return; }
+    const net = val('scale') - tare;
     if (val('raw') <= 0 || net <= 0) { toast('Проверь оба веса'); return; }
+    shared.raw = shared.raw || {};
+    shared.raw[card.dataset.name] = { g: val('raw'), at: new Date().toISOString() };
     shared.yield[card.dataset.name] = Math.round(net / val('raw') * 100);
     saveShared();
     toast(`Готового всего ${net} г, из 100 г ${rawWord(card.dataset.name)} ${shared.yield[card.dataset.name]} г`);
   } else if (act === 'clearyield') {
     delete shared.yield[el.dataset.name];
+    if (shared.raw) delete shared.raw[el.dataset.name];
     saveShared();
   } else if (act === 'addvessel') {
     const n = $('vName').value.trim(), w = Math.round(Number($('vWeight').value) || 0);
     if (!n || w <= 0) { toast('Впиши название и вес'); return; }
-    shared.vessels.push({ n, w });
+    shared.vessels.push({ n, w, cat: $('vCat').value });
     saveShared();
   } else if (act === 'delvessel') {
     if (!confirm('Удалить эту посуду?')) return;
@@ -623,7 +667,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target, act = t.dataset.act;
-  if (window.Sync && Sync.viewer && ['input', 'vphoto', 'cookedinput', 'yield'].includes(act)) {
+  if (window.Sync && Sync.viewer && ['input', 'vphoto', 'cookedinput', 'yield', 'rawsave'].includes(act)) {
     toast('Менять можно только на основном телефоне');
     render();
     return;
@@ -641,6 +685,13 @@ document.addEventListener('change', e => {
     setEaten(t.dataset.id, Number(t.value) * 100 / shared.yield[it.n]);
     render();
   }
+  if (act === 'rawsave') {
+    const g = Math.round(Number(t.value) || 0);
+    shared.raw = shared.raw || {};
+    if (g > 0) shared.raw[t.dataset.name] = { g, at: new Date().toISOString() }; else delete shared.raw[t.dataset.name];
+    saveShared();
+    render();
+  }
   if (act === 'yield') {
     const v = Math.round(Number(t.value) || 0);
     if (v > 0) shared.yield[t.dataset.name] = v; else delete shared.yield[t.dataset.name];
@@ -648,6 +699,8 @@ document.addEventListener('change', e => {
     render();
   }
 });
+// Remember which dish groups are open, so a re-render does not fold them back.
+document.addEventListener('toggle', e => { if (e.target.dataset && e.target.dataset.group) gramsOpen[e.target.dataset.group] = e.target.open; }, true);
 $('tabPlan').addEventListener('click', () => { state.view = 'plan'; save(); render(); window.scrollTo(0, 0); });
 $('tabGrams').addEventListener('click', () => { state.view = 'grams'; save(); render(); window.scrollTo(0, 0); });
 $('tabTrain').addEventListener('click', () => { state.view = 'train'; save(); render(); window.scrollTo(0, 0); });

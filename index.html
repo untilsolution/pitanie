@@ -160,6 +160,19 @@ body.locked{overflow:hidden}
 .photoview p{margin:0;color:#fff;text-align:center;font-size:15px}
 .photoview p small{color:#ccc;font-size:13px}
 .photoview button{min-height:44px;padding:0 24px;border-radius:22px;background:#fff;color:#111;font-weight:600}
+.group{margin-bottom:14px}
+.group>summary{list-style:none;min-height:56px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;background:var(--card);border:1px solid var(--line);border-radius:16px;color:var(--ink);font-weight:400}
+.group>summary::-webkit-details-marker{display:none}
+.group>summary::after{content:'›';font-size:24px;color:var(--muted);transform:rotate(90deg);transition:transform .2s}
+.group[open]>summary{margin-bottom:10px}
+.group[open]>summary::after{transform:rotate(-90deg)}
+.group>summary span{min-width:0}
+.group>summary b{display:block;font-size:17px}
+.group>summary small{display:block;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.field small.note{display:block;color:var(--muted);font-size:12px}
+.vfilter{margin:0 0 8px}
+.vfilter button.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+.vcat{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:6px 0 4px}
 </style>
 </head>
 <body>
