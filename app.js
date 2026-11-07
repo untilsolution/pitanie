@@ -333,20 +333,35 @@ function addExtra(x) {
   closeSheet();
 }
 
-// Photos are cut to a small square so they stay tiny in the phone's storage.
-function thumbnail(file) {
+// Each photo is kept twice: a small square for the list and a larger copy to open full screen.
+function photoCopies(file) {
   return new Promise((resolve, reject) => {
     const img = new Image(), url = URL.createObjectURL(file);
     img.onload = () => {
-      const size = 160, c = document.createElement('canvas'), side = Math.min(img.naturalWidth, img.naturalHeight);
-      c.width = c.height = size;
-      c.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+      const w = img.naturalWidth, h = img.naturalHeight, side = Math.min(w, h);
+      const thumb = document.createElement('canvas');
+      thumb.width = thumb.height = 160;
+      thumb.getContext('2d').drawImage(img, (w - side) / 2, (h - side) / 2, side, side, 0, 0, 160, 160);
+      const k = Math.min(1, 900 / Math.max(w, h)), big = document.createElement('canvas');
+      big.width = Math.round(w * k);
+      big.height = Math.round(h * k);
+      big.getContext('2d').drawImage(img, 0, 0, big.width, big.height);
       URL.revokeObjectURL(url);
-      resolve(c.toDataURL('image/jpeg', 0.7));
+      resolve({ photo: thumb.toDataURL('image/jpeg', 0.7), big: big.toDataURL('image/jpeg', 0.72) });
     };
     img.onerror = reject;
     img.src = url;
   });
+}
+function openPhoto(v) {
+  const box = document.createElement('div');
+  box.className = 'photoview';
+  box.dataset.act = 'closephoto';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-label', `Фото: ${v.n}`);
+  box.innerHTML = `<img src="${v.big || v.photo}" alt="${esc(v.n)}"><p>${esc(v.n)}, ${v.w} г${v.big ? '' : '<br><small>Это старое маленькое фото. Чтобы было чётко, нажми «Заменить фото» и сними заново.</small>'}</p><button type="button" data-act="closephoto">Закрыть</button>`;
+  document.body.appendChild(box);
+  document.body.classList.add('locked');
 }
 
 function shoppingList() {
@@ -394,7 +409,10 @@ function renderGrams() {
       ${y ? `<button type="button" class="btn ghost small" data-act="clearyield" data-name="${esc(n)}">Стереть, сварю новые</button>` : ''}
     </section>`;
   }).join('');
-  const vessels = shared.vessels.map((v, i) => `<div class="vessel"><label class="vthumb" aria-label="Фото: ${esc(v.n)}">${v.photo ? `<img src="${v.photo}" alt="">` : '<i>Фото</i>'}<input type="file" accept="image/*" data-act="vphoto" data-i="${i}" hidden></label><span>${esc(v.n)}</span><b>${v.w} г</b>
+  const upload = (v, i, text) => `<label class="${text ? 'vreplace' : 'vthumb'}" aria-label="${text ? 'Заменить фото' : 'Добавить фото'}: ${esc(v.n)}">${text || '<i>Фото</i>'}<input type="file" accept="image/*" data-act="vphoto" data-i="${i}" hidden></label>`;
+  const vessels = shared.vessels.map((v, i) => `<div class="vessel">${v.photo
+      ? `<button type="button" class="vthumb" data-act="viewphoto" data-i="${i}" aria-label="Открыть фото: ${esc(v.n)}"><img src="${v.photo}" alt=""></button>`
+      : upload(v, i)}<span>${esc(v.n)}${v.photo ? `<br>${upload(v, i, 'Заменить фото')}` : ''}</span><b>${v.w} г</b>
       <button type="button" data-act="delvessel" data-i="${i}" aria-label="Удалить: ${esc(v.n)}">Удалить</button></div>`).join('');
   $('main').innerHTML = `<h1>Граммовки</h1><p class="sub">Впиши, сколько выходит готового, и рацион сам покажет порции.</p>
     ${cards}
@@ -460,11 +478,13 @@ function dayText(d) {
 }
 
 // What a phone without a key may do: look around, nothing that changes the marks.
-const VIEWER_OK = new Set(['day', 'sync', 'closesheet', 'savekey', 'pickv']);
+const VIEWER_OK = new Set(['day', 'sync', 'closesheet', 'savekey', 'pickv', 'viewphoto', 'closephoto']);
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (!el || ['input', 'cookedinput', 'yield', 'calcinput', 'sheetsearch', 'xamount', 'vphoto'].includes(el.dataset.act)) return;
   const { act, id } = el.dataset;
+  if (act === 'viewphoto') { openPhoto(shared.vessels[+el.dataset.i]); return; }
+  if (act === 'closephoto') { document.querySelectorAll('.photoview').forEach(b => b.remove()); document.body.classList.remove('locked'); return; }
   if (window.Sync && Sync.viewer && !VIEWER_OK.has(act) && !(act === 'shop' && Sync.canShop)) {
     toast(act === 'shop' ? 'Чтобы отмечать покупки, нужен ключ: Рацион, кнопка внизу' : 'Отмечать можно только на основном телефоне');
     return;
@@ -610,8 +630,8 @@ document.addEventListener('change', e => {
   }
   if (act === 'input') { setEaten(t.dataset.id, t.value); render(); }
   if (act === 'vphoto' && t.files[0]) {
-    thumbnail(t.files[0]).then(url => {
-      shared.vessels[+t.dataset.i].photo = url;
+    photoCopies(t.files[0]).then(copies => {
+      Object.assign(shared.vessels[+t.dataset.i], copies);
       saveShared();
       render();
     }).catch(() => toast('Не получилось прочитать фото'));

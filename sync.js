@@ -66,7 +66,8 @@ window.Sync = (() => {
     for (const k of ['eaten', 'swaps', 'extras']) if (plain(data[k])) state[k] = data[k];
     if (plain(data.yield)) shared.yield = data.yield;
     if (Array.isArray(data.vessels)) {
-      shared.vessels = data.vessels.map(v => ({ n: String(v.n), w: Number(v.w) || 0, ...(/^data:image\/jpeg;base64,[\w+/=]+$/.test(v.photo || '') ? { photo: v.photo } : {}) }));
+      const jpeg = p => /^data:image\/jpeg;base64,[\w+/=]+$/.test(p || '');
+      shared.vessels = data.vessels.map(v => ({ n: String(v.n), w: Number(v.w) || 0, ...(jpeg(v.photo) ? { photo: v.photo } : {}), ...(jpeg(v.big) ? { big: v.big } : {}) }));
     }
     if (Array.isArray(data.myfoods)) {
       const n = x => Number(x) || 0;
