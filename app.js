@@ -396,7 +396,7 @@ const vcatOf = v => (VCATS.includes(v.cat) ? v.cat
   : /кастрюл|сотейник|казан/i.test(v.n) ? 'Кастрюли' : /сковород/i.test(v.n) ? 'Сковородки' : /тарел|миск/i.test(v.n) ? 'Тарелки' : 'Другое');
 const SIDE = /^(Макароны|Рис|Гречка|Пюре|Крупа|Овсян|Картофель|Булгур|Кускус)/;
 const gramsOpen = {};
-let rawEdit = null;
+let rawEdit = null, rawTimer = 0;
 // In the weights tab a dish is just «Макароны», not «Макароны (сухие)».
 const dishName = n => n.replace(/ \((сухие|сухой|сухая)\)$/, '');
 const shortDate = iso => new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
@@ -679,7 +679,31 @@ document.addEventListener('input', e => {
   const act = e.target.dataset.act;
   if (act === 'sheetsearch') { sheet.q = e.target.value; $('sheetList').innerHTML = sheetList(); }
   if (act === 'xamount') pickInfo();
+  // The raw weight box folds back into a line by itself a moment after typing stops.
+  if (act === 'rawsave') {
+    clearTimeout(rawTimer);
+    const box = e.target;
+    rawTimer = setTimeout(() => { if (box.isConnected) saveRaw(box); }, 1200);
+  }
 });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.dataset && e.target.dataset.act === 'rawsave') saveRaw(e.target);
+});
+document.addEventListener('focusout', e => {
+  if (e.target.dataset && e.target.dataset.act === 'rawsave' && e.target.isConnected) saveRaw(e.target);
+});
+function saveRaw(t) {
+  clearTimeout(rawTimer);
+  if (rawEdit === null) return;
+  rawEdit = null;
+  const g = Math.round(Number(t.value) || 0), name = t.dataset.name, old = (shared.raw || {})[name];
+  shared.raw = shared.raw || {};
+  if (!old || old.g !== g) {
+    if (g > 0) shared.raw[name] = { g, at: new Date().toISOString() }; else delete shared.raw[name];
+    saveShared();
+  }
+  render();
+}
 document.addEventListener('change', e => {
   const t = e.target, act = t.dataset.act;
   if (window.Sync && Sync.viewer && ['input', 'vphoto', 'cookedinput', 'yield', 'rawsave'].includes(act)) {
@@ -700,14 +724,7 @@ document.addEventListener('change', e => {
     setEaten(t.dataset.id, Number(t.value) * 100 / shared.yield[it.n]);
     render();
   }
-  if (act === 'rawsave') {
-    const g = Math.round(Number(t.value) || 0);
-    shared.raw = shared.raw || {};
-    if (g > 0) shared.raw[t.dataset.name] = { g, at: new Date().toISOString() }; else delete shared.raw[t.dataset.name];
-    rawEdit = null;
-    saveShared();
-    render();
-  }
+  if (act === 'rawsave' && t.isConnected) saveRaw(t);
   if (act === 'yield') {
     const v = Math.round(Number(t.value) || 0);
     shared.yieldAt = shared.yieldAt || {};
