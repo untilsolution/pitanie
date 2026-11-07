@@ -404,12 +404,11 @@ const shortDate = iso => new Date(iso).toLocaleDateString('ru-RU', { day: 'numer
 function renderGrams() {
   const thumb = v => (v.photo ? `<img src="${v.photo}" alt="">` : '');
   const cats = VCATS.filter(c => shared.vessels.some(v => vcatOf(v) === c));
-  const vesselPick = `${cats.length > 1 ? `<div class="chips vfilter" role="group" aria-label="Тип посуды">
-      <button type="button" class="on" data-act="vfilter" data-cat="">Вся</button>${cats.map(c => `<button type="button" data-act="vfilter" data-cat="${c}">${c}</button>`).join('')}</div>` : ''}
+  const vesselPick = `<div class="chips vfilter" role="group" aria-label="Тип посуды">
+      <button type="button" class="on" data-act="vfilter" data-cat="">Вся</button>${cats.length > 1 ? cats.map(c => `<button type="button" data-act="vfilter" data-cat="${c}">${c}</button>`).join('') : ''}<button type="button" data-act="vfilter" data-custom="1">Своя</button></div>
     <div class="vpick" role="group" aria-label="Посуда">
       <button type="button" class="vp on" data-act="pickv" data-w="0"><small>Без посуды</small></button>
-      ${shared.vessels.map(v => `<button type="button" class="vp" data-act="pickv" data-w="${v.w}" data-cat="${vcatOf(v)}">${thumb(v)}<small><span>${esc(v.n)}</span><b>${v.w} г</b></small></button>`).join('')}
-      <button type="button" class="vp" data-act="pickv" data-custom="1"><small>Своя посуда</small></button>
+      ${shared.vessels.map((v, i) => `<button type="button" class="vp" data-act="pickv" data-i="${i}" data-w="${v.w}" data-cat="${vcatOf(v)}">${thumb(v)}<small><span>${esc(v.n)}</span><b>${v.w} г</b></small></button>`).join('')}
     </div>
     <label class="field vcustom" hidden><span>Вес этой посуды</span><input type="number" inputmode="numeric" min="1" data-f="vcustom" data-act="calcinput" aria-label="Вес посуды, г"><span>г</span></label>`;
   const card = n => {
@@ -540,9 +539,9 @@ document.addEventListener('click', e => {
   }
   if (act === 'pickv') {
     el.closest('.vpick').querySelectorAll('.vp').forEach(b => b.classList.toggle('on', b === el));
-    const custom = el.closest('.cook').querySelector('.vcustom');
-    custom.hidden = !el.dataset.custom;
-    if (el.dataset.custom) custom.querySelector('input').focus();
+    // Tapping the small photo also opens it large, like in the cookware list.
+    const v = shared.vessels[+el.dataset.i];
+    if (e.target.closest('img') && v && v.photo) openPhoto(v);
     return;
   }
   if (act === 'rawedit') {
@@ -553,9 +552,13 @@ document.addEventListener('click', e => {
     return;
   }
   if (act === 'vfilter') {
-    const card = el.closest('.cook'), cat = el.dataset.cat;
+    const card = el.closest('.cook'), cat = el.dataset.cat, own = !!el.dataset.custom;
     el.parentNode.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === el));
     card.querySelectorAll('.vp[data-cat]').forEach(b => { b.hidden = !!cat && b.dataset.cat !== cat; });
+    card.querySelector('.vpick').hidden = own;
+    const custom = card.querySelector('.vcustom');
+    custom.hidden = !own;
+    if (own) custom.querySelector('input').focus();
     return;
   }
   if (act === 'extra') { sheet = { mode: 'extra', q: '' }; renderSheet(); return; }
@@ -648,8 +651,9 @@ document.addEventListener('click', e => {
     if (window.Sync) Sync.shop(n, bought);
   } else if (act === 'calc') {
     const card = el.closest('.cook'), val = f => Number(card.querySelector(`[data-f=${f}]`).value) || 0;
-    const picked = card.querySelector('.vp.on'), tare = picked.dataset.custom ? val('vcustom') : Number(picked.dataset.w);
-    if (picked.dataset.custom && tare <= 0) { toast('Впиши вес своей посуды'); return; }
+    const own = !!card.querySelector('.vfilter .on[data-custom]');
+    const tare = own ? val('vcustom') : Number(card.querySelector('.vp.on').dataset.w);
+    if (own && tare <= 0) { toast('Впиши вес своей посуды'); return; }
     const net = val('scale') - tare;
     if (val('raw') <= 0 || net <= 0) { toast('Проверь оба веса'); return; }
     shared.raw = shared.raw || {};
