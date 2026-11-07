@@ -14,6 +14,9 @@ const SHOP = [
   { re: /^Шоколад/, fmt: g => `${Math.ceil(g / 75)} пл. (${g} г)` },
   { re: /^Чокопай/, name: 'Чокопай', fmt: g => `${Math.ceil(g / 30)} шт.` },
   { re: /^Белок яичный/, name: 'Яйца на белок', fmt: g => `${Math.ceil(g / 37.5)} шт.` },
+  { re: /^Пюре/, name: 'Картофель на пюре', fmt: g => grams(g) },
+  { re: /^Говядина/, name: 'Говядина', fmt: g => grams(g) },
+  { re: /^Тунец/, name: 'Тунец', fmt: g => `${Math.ceil(g / 185)} банк. по 185 г` },
 ];
 const liters = g => (g >= 1000 ? `${(g / 1000).toFixed(1).replace('.', ',')} л` : `${g} мл`);
 const grams = g => (g >= 1000 ? `${(g / 1000).toFixed(2).replace('.', ',')} кг` : `${g} г`);
@@ -42,7 +45,7 @@ function saveShared() {
   try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
   if (window.Sync) Sync.changed();
 }
-const COOK = /^(Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты)/;
+const COOK = /^(Макароны|Рис|Гречка|Пюре|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты)/;
 const DRY = /^(Макароны|Рис|Гречка|Крупа|Овсян)/;
 const rawWord = n => (DRY.test(n) ? 'сухого' : 'сырого');
 const cookables = () => [...new Set(PLAN.days.flatMap(d => d.meals.flatMap(m => m.items.map(it => it.n))).filter(n => COOK.test(n)))];
@@ -348,11 +351,13 @@ function thumbnail(file) {
 
 function shoppingList() {
   const sums = new Map();
-  PLAN.days.forEach(day => day.meals.forEach(meal => meal.items.forEach(it => {
+  // shopFrom: when days are added to a running plan, shop only for the new days, with their own ticks.
+  const from = PLAN.shopFrom || 0;
+  PLAN.days.slice(from).forEach(day => day.meals.forEach(meal => meal.items.forEach(it => {
     const rule = SHOP.find(r => r.re.test(it.n));
     if (!rule) return;
     const name = rule.name || it.n;
-    const row = sums.get(name) || { name, g: 0, fmt: rule.fmt };
+    const row = sums.get(name) || { name, key: from ? `${from}:${name}` : name, g: 0, fmt: rule.fmt };
     row.g += it.a;
     sums.set(name, row);
   })));
@@ -361,12 +366,12 @@ function shoppingList() {
 
 function renderShop() {
   const rows = shoppingList().map(r => {
-    const done = !!state.shop[r.name];
-    return `<button type="button" class="shop ${done ? 'done' : ''}" data-act="shop" data-name="${esc(r.name)}" aria-pressed="${done}">
+    const done = !!state.shop[r.key];
+    return `<button type="button" class="shop ${done ? 'done' : ''}" data-act="shop" data-name="${esc(r.key)}" aria-pressed="${done}">
       <span class="tick"><i>${done ? '✓' : ''}</i></span><span>${esc(r.name)}</span><span class="amt">${r.fmt(r.g)}</span></button>`;
   }).join('');
-  const n = PLAN.days.length;
-  $('main').innerHTML = `${window.Sync ? Sync.bar() : ''}<h1>Покупки</h1><p class="sub">На весь план, дней: ${n}. Орехи и мюсли не считаем.</p>
+  const days = PLAN.days.slice(PLAN.shopFrom || 0), span = days.length > 1 ? `${days[0].tab}–${days[days.length - 1].tab}` : days[0].tab;
+  $('main').innerHTML = `${window.Sync ? Sync.bar() : ''}<h1>Покупки</h1><p class="sub">На дни ${esc(span)}. Орехи и мюсли не считаем.</p>
     <section class="card">${rows}</section>`;
 }
 
