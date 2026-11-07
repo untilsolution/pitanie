@@ -66,8 +66,18 @@ const SWAP_CATS = ['Сладкое', 'Овощи и фрукты', 'Орехи �
 const label = p => p.n + (p.brand ? `, ${p.brand}` : '');
 const portionOf = (p, a) => {
   const k = a / p.base;
-  return { n: label(p), a, u: p.u, p: +(p.p * k).toFixed(1), f: +(p.f * k).toFixed(1), c: +(p.c * k).toFixed(1), k: +(p.k * k).toFixed(1), fb: 0 };
+  return { n: label(p), a, u: p.u, p: +(p.p * k).toFixed(1), f: +(p.f * k).toFixed(1), c: +(p.c * k).toFixed(1), k: +(p.k * k).toFixed(1), fb: 0,
+    src: { base: p.base, u: p.u, p: p.p, f: p.f, c: p.c, k: p.k } };
 };
+// What an outside-the-plan entry is based on, so its amount can be changed later.
+const srcOf = x => x.src || (x.a ? { base: x.a, u: x.u, p: x.p, f: x.f, c: x.c, k: x.k } : null);
+const macroInputs = (v = {}) => `<div class="grid4">
+        <label class="field col"><span>Белки</span><input type="number" inputmode="decimal" id="cP" value="${v.p ?? ''}" data-act="calcinput" aria-label="Белки, г"></label>
+        <label class="field col"><span>Жиры</span><input type="number" inputmode="decimal" id="cF" value="${v.f ?? ''}" data-act="calcinput" aria-label="Жиры, г"></label>
+        <label class="field col"><span>Углев.</span><input type="number" inputmode="decimal" id="cC" value="${v.c ?? ''}" data-act="calcinput" aria-label="Углеводы, г"></label>
+        <label class="field col"><span>Ккал</span><input type="number" inputmode="decimal" id="cK" value="${v.k ?? ''}" data-act="calcinput" aria-label="Ккал"></label>
+      </div>`;
+const readMacros = () => ({ p: Number($('cP').value) || 0, f: Number($('cF').value) || 0, c: Number($('cC').value) || 0, k: Number($('cK').value) || 0 });
 const eatenOf = (id, it) => Math.min(state.eaten[id] || 0, it.a);
 
 function totals(d) {
@@ -168,7 +178,7 @@ function extrasHtml(d) {
   const list = extrasOf(d);
   if (!list.length) return '';
   const rows = list.map((x, i) => `<div class="item"><div class="row xrow">
-      <div class="info"><b>${esc(x.n)}</b><small>${x.a ? `${x.a} ${x.u} · ` : ''}${whole(x.k)} ккал · Б ${num(x.p)} Ж ${num(x.f)} У ${num(x.c)}</small></div>
+      <button type="button" class="info" data-act="editextra" data-i="${i}" aria-label="Изменить: ${esc(x.n)}"><b>${esc(x.n)}</b><small>${x.a ? `${x.a} ${x.u} · ` : ''}${whole(x.k)} ккал · Б ${num(x.p)} Ж ${num(x.f)} У ${num(x.c)}</small></button>
       <button type="button" class="del" data-act="delextra" data-i="${i}" aria-label="Убрать: ${esc(x.n)}">Убрать</button>
     </div></div>`).join('');
   const kcal = list.reduce((s, x) => s + x.k, 0);
@@ -254,6 +264,15 @@ function renderSheet() {
       <button type="button" class="btn ghost small" data-act="savekey" data-role="shop">Только покупки</button>`}`);
     return;
   }
+  if (sheet.mode === 'editextra') {
+    const x = extrasOf(state.day)[sheet.i], src = srcOf(x);
+    s.innerHTML = sheetFrame('Изменить', `<label class="field col"><span>Название</span><input type="text" id="cName" value="${esc(x.n)}" data-act="calcinput" aria-label="Название"></label>
+      ${src ? `<label class="field"><span>Сколько съел</span><input type="number" inputmode="decimal" min="0" id="xAmount" value="${x.a}" data-act="calcinput" aria-label="Количество"><span>${esc(src.u)}</span></label>` : ''}
+      <p class="sub">${src ? `Значения на ${num(src.base)} ${esc(src.u)}` : 'Значения на всю порцию'}</p>
+      ${macroInputs(src || x)}
+      <button type="button" class="btn small" data-act="saveextra">Сохранить</button>`);
+    return;
+  }
   if (sheet.mode === 'swap') {
     const it = findItem(sheet.id);
     title = `Заменить: ${it.n}`;
@@ -275,12 +294,12 @@ function renderSheet() {
   }
   const custom = sheet.mode === 'extra' ? `<details><summary>Своё блюдо, которого нет в списке</summary>
       <label class="field col"><span>Название</span><input type="text" id="cName" data-act="calcinput" aria-label="Название"></label>
-      <div class="grid4">
-        <label class="field col"><span>Белки</span><input type="number" inputmode="decimal" id="cP" data-act="calcinput" aria-label="Белки, г"></label>
-        <label class="field col"><span>Жиры</span><input type="number" inputmode="decimal" id="cF" data-act="calcinput" aria-label="Жиры, г"></label>
-        <label class="field col"><span>Углев.</span><input type="number" inputmode="decimal" id="cC" data-act="calcinput" aria-label="Углеводы, г"></label>
-        <label class="field col"><span>Ккал</span><input type="number" inputmode="decimal" id="cK" data-act="calcinput" aria-label="Ккал"></label>
+      <label class="field"><span>Сколько съел</span><input type="number" inputmode="decimal" min="0" id="xAmount" data-act="calcinput" aria-label="Сколько съел, г"><span>г</span></label>
+      <div class="chips cmode" role="group" aria-label="На что указаны БЖУ">
+        <button type="button" class="on" data-act="cmode" data-m="100" aria-pressed="true">БЖУ на 100 г</button>
+        <button type="button" data-act="cmode" data-m="all" aria-pressed="false">БЖУ на всю порцию</button>
       </div>
+      ${macroInputs()}
       <button type="button" class="btn small" data-act="addcustom">Добавить блюдо</button></details>` : '';
   const web = sheet.mode === 'extra' ? '<button type="button" class="btn ghost small webbtn" data-act="websearch">Найти в интернете</button><div id="webBox"></div>' : '';
   s.innerHTML = sheetFrame(title, `${body}
@@ -463,10 +482,34 @@ document.addEventListener('click', e => {
     render();
     return;
   }
+  if (act === 'cmode') {
+    el.closest('.cmode').querySelectorAll('button').forEach(b => { b.classList.toggle('on', b === el); b.setAttribute('aria-pressed', String(b === el)); });
+    return;
+  }
   if (act === 'addcustom') {
-    const n = $('cName').value.trim(), v = k => Number($(k).value) || 0;
-    if (!n || !v('cK')) { toast('Впиши название и калории'); return; }
-    addExtra({ n, a: 0, u: '', p: v('cP'), f: v('cF'), c: v('cC'), k: v('cK'), fb: 0 });
+    const n = $('cName').value.trim(), g = Number($('xAmount').value) || 0, v = readMacros();
+    const per100 = document.querySelector('.cmode .on').dataset.m === '100';
+    if (!n || !v.k) { toast('Впиши название и калории'); return; }
+    if (per100 && g <= 0) { toast('Впиши, сколько граммов съел'); return; }
+    const x = g > 0 ? portionOf({ n, brand: '', base: per100 ? 100 : g, u: 'г', ...v }, g) : { n, a: 0, u: '', ...v, fb: 0 };
+    addExtra(x);
+    render();
+    return;
+  }
+  if (act === 'editextra') { sheet = { mode: 'editextra', i: +el.dataset.i, q: '' }; renderSheet(); return; }
+  if (act === 'saveextra') {
+    const list = extrasOf(state.day), x = list[sheet.i], n = $('cName').value.trim() || x.n, v = readMacros();
+    if (!v.k) { toast('Впиши калории'); return; }
+    const src = srcOf(x);
+    if (src) {
+      const g = Number($('xAmount').value) || 0;
+      if (g <= 0) { toast('Впиши количество'); return; }
+      list[sheet.i] = { ...portionOf({ n, brand: '', base: src.base, u: src.u, ...v }, g) };
+    } else {
+      list[sheet.i] = { ...x, n, ...v };
+    }
+    save();
+    closeSheet();
     render();
     return;
   }
