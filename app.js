@@ -73,6 +73,8 @@ rebuildProducts();
 const SWAPPABLE = /^(Мармелад|Чокопай|Шоколад|Зефир|Мёд|Джем|Пряники|Пломбир|Печенье|Банан|Яблоко|Киви|Апельсин|Мандарин|Слива|Грецкий|Миндаль|Фундук|Кедровые|Курага)/;
 const SWAP_CATS = ['Сладкое', 'Овощи и фрукты', 'Орехи и сухофрукты'];
 const label = p => p.n + (p.brand ? `, ${p.brand}` : '');
+// Search treats Ё and Е as the same letter, as people usually type Е.
+const norm = s => String(s).toLowerCase().replace(/ё/g, 'е');
 const portionOf = (p, a) => {
   const k = a / p.base;
   return { n: label(p), a, u: p.u, p: +(p.p * k).toFixed(1), f: +(p.f * k).toFixed(1), c: +(p.c * k).toFixed(1), k: +(p.k * k).toFixed(1), fb: 0,
@@ -198,9 +200,9 @@ function extrasHtml(d) {
 let sheet = null;
 function closeSheet() { sheet = null; $('sheet').hidden = true; $('sheet').innerHTML = ''; document.body.classList.remove('locked'); }
 function swapOptions() {
-  const it = findItem(sheet.id), q = sheet.q.toLowerCase();
+  const it = findItem(sheet.id), q = norm(sheet.q);
   return PRODUCTS.filter(p => SWAP_CATS.includes(p.cat) && p.u === 'г' && p.k > 0 && !/Сгущёнка/.test(p.n)
-      && !label(p).startsWith(it.n) && label(p).toLowerCase().includes(q))
+      && !label(p).startsWith(it.n) && norm(label(p)).includes(q))
     .map(p => {
       const unit = /^Чокопай/.test(p.n) ? 30 : 5;
       const a = Math.max(unit, Math.round(it.k / p.k * p.base / unit) * unit);
@@ -213,8 +215,8 @@ function sheetList() {
       <b>${esc(o.x.n)}${o.p.freq ? ` <em>${esc(o.p.freq.toLowerCase())}</em>` : ''}</b>
       <small>${o.a} г · ${whole(o.x.k)} ккал · Б ${num(o.x.p)} Ж ${num(o.x.f)} У ${num(o.x.c)}</small></button>`).join('') || '<p class="sub">Ничего не нашлось</p>';
   }
-  const q = sheet.q.toLowerCase();
-  return PRODUCTS.map((p, i) => ({ p, i })).filter(o => label(o.p).toLowerCase().includes(q)).map(o =>
+  const q = norm(sheet.q);
+  return PRODUCTS.map((p, i) => ({ p, i })).filter(o => norm(label(o.p)).includes(q)).map(o =>
     `<button type="button" class="pick" data-act="pickextra" data-i="${o.i}"><b>${esc(label(o.p))}${o.p.mine ? ' <em>моё</em>' : ''}</b>
       <small>на ${o.p.base} ${o.p.u}: ${whole(o.p.k)} ккал · Б ${num(o.p.p)} Ж ${num(o.p.f)} У ${num(o.p.c)}</small></button>`).join('') || '<p class="sub">В таблице нет. Нажми «Найти в интернете».</p>';
 }
@@ -504,7 +506,7 @@ document.addEventListener('click', e => {
     if (per100 && g <= 0) { toast('Впиши, сколько граммов съел'); return; }
     const base = g > 0 ? { n, base: per100 ? 100 : g, u: 'г', ...v, start: g } : { n, base: 1, u: 'порция', ...v, start: 1 };
     if ($('cRemember').checked) {
-      shared.myfoods = (shared.myfoods || []).filter(p => p.n.toLowerCase() !== n.toLowerCase()).concat(base);
+      shared.myfoods = (shared.myfoods || []).filter(p => norm(p.n) !== norm(n)).concat(base);
       saveShared();
       rebuildProducts();
     }
