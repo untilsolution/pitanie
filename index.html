@@ -144,7 +144,9 @@ body.locked{overflow:hidden}
 .trwarm ol{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:4px 0 0;padding:0}
 .trwarm li{border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:14px;font-variant-numeric:tabular-nums}
 .syncbar { margin: 0 0 6px; font-size: 13px; opacity: .7; }
-.next .nextrow { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; }
+.next .nextrow { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.next .nextrow:last-child { padding-bottom: 14px; }
+.next .nextrow span { min-width: 0; overflow-wrap: anywhere; }
 .next .nextrow b { white-space: nowrap; }
 </style>
 </head>
