@@ -16,6 +16,7 @@ const SHOP = [
   { re: /^Белок яичный/, name: 'Яйца на белок', fmt: g => `${Math.ceil(g / 37.5)} шт.` },
   { re: /^Пюре/, name: 'Пюре (картофель, лук, молоко, масло)', fmt: g => grams(g) },
   { re: /^Говядина/, name: 'Говядина', fmt: g => grams(g) },
+  { re: /^Индейка духовая/, name: 'Индейка духовая Индилайт', fmt: g => grams(g) },
   { re: /^Тунец/, name: 'Тунец', fmt: g => `${Math.ceil(g / 185)} банк. по 185 г` },
 ];
 const liters = g => (g >= 1000 ? `${(g / 1000).toFixed(1).replace('.', ',')} л` : `${g} мл`);
@@ -50,7 +51,9 @@ const DRY = /^(Макароны|Рис|Гречка|Крупа|Овсян)/;
 // Mash is planned by the weight of its raw ingredients, like pasta and meat.
 const MASH = /^Пюре/;
 const rawWord = n => (DRY.test(n) ? 'сухого' : MASH.test(n) ? 'продуктов' : 'сырого');
-const cookables = () => [...new Set(PLAN.days.flatMap(d => d.meals.flatMap(m => m.items.map(it => it.n))).filter(n => COOK.test(n)))];
+// showFrom: older days stay in the plan (their ticks keep their ids) but are hidden from the tabs.
+const SHOW_FROM = Math.min(PLAN.showFrom || 0, PLAN.days.length - 1);
+const cookables = () => [...new Set(PLAN.days.slice(SHOW_FROM).flatMap(d => d.meals.flatMap(m => m.items.map(it => it.n))).filter(n => COOK.test(n)))];
 const cookedOf = (it, raw) => (shared.yield[it.n] ? Math.round(raw * shared.yield[it.n] / 100) : null);
 
 const $ = id => document.getElementById(id);
@@ -464,7 +467,7 @@ function renderGrams() {
 
 function render() {
   $('days').hidden = state.view !== 'plan';
-  $('days').innerHTML = PLAN.days.map((day, d) =>
+  $('days').innerHTML = PLAN.days.map((day, d) => d < SHOW_FROM ? '' :
     `<button type="button" class="day" role="tab" data-act="day" data-d="${d}" aria-selected="${d === state.day}">${esc(day.tab)}</button>`).join('');
   $('tabPlan').setAttribute('aria-current', state.view === 'plan' ? 'page' : 'false');
   $('tabGrams').setAttribute('aria-current', state.view === 'grams' ? 'page' : 'false');
@@ -747,6 +750,10 @@ $('tabGrams').addEventListener('click', () => { state.view = 'grams'; save(); re
 $('tabTrain').addEventListener('click', () => { state.view = 'train'; save(); render(); window.scrollTo(0, 0); });
 $('tabShop').addEventListener('click', () => { state.view = 'shop'; save(); render(); window.scrollTo(0, 0); });
 
-if (state.day >= PLAN.days.length) state.day = 0;
+if (state.day >= PLAN.days.length || state.day < SHOW_FROM) {
+  const today = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  const i = PLAN.days.findIndex((day, d) => d >= SHOW_FROM && day.title.includes(' ' + today));
+  state.day = i >= 0 ? i : SHOW_FROM;
+}
 render();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
