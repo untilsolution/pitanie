@@ -148,6 +148,14 @@ body.locked{overflow:hidden}
 .sheetbody h3{margin:14px 0 0;font-size:15px}
 .sheetbody .nextrow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 0;border-top:1px solid var(--line)}
 .sheetbody .nextrow b{white-space:nowrap}
+.rbrow{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:6px 0;border-top:1px solid var(--line);text-align:left}
+.rbrow span:nth-child(2){flex:1;min-width:0;overflow-wrap:anywhere;font-size:15px}
+.rbrow b{white-space:nowrap;font-size:15px}
+.rbrow .tick{flex:0 0 32px;height:32px}
+.rbrow .tick i{background:var(--accent);border-color:var(--accent)}
+.rbrow.off .tick i{background:none;border-color:var(--muted)}
+.rbrow.off span:nth-child(2),.rbrow.off b{color:var(--muted);text-decoration:line-through}
+.btn[disabled]{opacity:.45}
 .syncbar { margin: 0 0 6px; font-size: 13px; opacity: .7; }
 .next .nextrow { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); }
 .next .nextrow:last-child { padding-bottom: 14px; }

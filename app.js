@@ -290,49 +290,74 @@ const leftAhead = (d, g) => dayItems(d).filter(o => !(state.eaten[o.id] > 0) && 
 const FRUIT = /^(Банан|Яблоко|Киви|Апельсин|Мандарин|Слива|Курага|Грецкий|Миндаль|Фундук|Кедровые)/;
 // Treats pay for treats; fruit and nuts go last, and only for another sweet.
 const treatsAhead = d => leftAhead(d, 'sweet').filter(o => !FRUIT.test(o.it.n));
-function rebalancePlan(x, d) {
+// x: what came on top of the plan (food eaten outside it, or the difference a swap made).
+// way: which of the ways to pay for it. Returns the proposed changes; each can be switched off by the user.
+function rebalancePlan(x, d, way) {
   const changes = [], cut = { p: 0, f: 0, c: 0, k: 0 };
   // Take `need` of one macro out of the listed items, earliest meal first; a crumb of a portion goes entirely.
   const cutBy = (list, key, need, crumb) => {
     for (const o of list) {
       const it = o.it, per = it[key] / it.a, unit = unitOf(it.n, it.u, groupOf(it.n));
-      if (need < per * unit / 2 || per <= 0) continue;
+      if (need < per * unit / 2 || per <= 0 || changes.some(c => c.id === o.id)) continue;
       let g = Math.min(it.a, Math.round(need / per / unit) * unit);
       if (it.a - g < crumb) g = it.a;
       if (g <= 0) continue;
-      changes.push({ id: o.id, n: it.n, u: it.u, from: it.a, to: +(it.a - g).toFixed(1) });
+      changes.push({ id: o.id, n: it.n, u: it.u, from: it.a, to: +(it.a - g).toFixed(1), k: it.k * g / it.a, on: true });
       for (const m in cut) cut[m] += it[m] * g / it.a;
       need -= per * g;
     }
   };
-  const over = () => x.k - cut.k;
-  if (groupOf(x.n, x.cat) === 'sweet') {
-    cutBy(treatsAhead(d), 'k', x.k, 10);
-    if (over() > 60) cutBy(leftAhead(d, 'sweet').filter(o => FRUIT.test(o.it.n)), 'k', over(), 10);
-    if (over() > 60) cutBy(leftAhead(d, 'side'), 'k', over(), 30);
-  } else {
-    cutBy(leftAhead(d, 'side'), 'c', x.c, 30);
-    const meat = leftAhead(d, 'meat'), spare = x.p - cut.p;
-    if (over() > 60 && spare > 5 && meat.length) cutBy(meat, 'p', Math.min(spare, over() * meat[0].it.p / meat[0].it.k), 50);
-    if (over() > 60) cutBy(leftAhead(d, 'sauce'), 'k', over(), 10);
-    if (over() > 60) cutBy(treatsAhead(d), 'k', over(), 10);
-  }
+  const over = () => x.k - cut.k, more = () => over() > 60;
+  // The swapped dish's own meal gives up its side first.
+  const sides = () => leftAhead(d, 'side').sort((a, b) => (b.m === x.m) - (a.m === x.m));
+  const fruit = () => leftAhead(d, 'sweet').filter(o => FRUIT.test(o.it.n));
+  const meat = () => {
+    const list = leftAhead(d, 'meat').filter(o => o.id !== x.id), spare = x.p - cut.p;
+    if (more() && spare > 5 && list.length) cutBy(list, 'p', Math.min(spare, over() * list[0].it.p / list[0].it.k), 50);
+  };
+  const sauce = () => more() && cutBy(leftAhead(d, 'sauce'), 'k', over(), 10);
+  const treats = () => more() && cutBy(treatsAhead(d), 'k', over(), 10);
+  const sidesK = () => more() && cutBy(sides(), 'k', over(), 30);
+  const sidesC = () => x.c > 5 && cutBy(sides(), 'c', x.c, 30);
+  const WAYS = {
+    sweet: [[treats, () => more() && cutBy(fruit(), 'k', over(), 10), sidesK], [sidesK], [() => more() && cutBy(fruit(), 'k', over(), 10), treats]],
+    meal: [[sidesC, meat, sauce, treats], [sidesK, meat], [sidesC, treats, sauce]],
+    swap: [[sidesC], [sidesK], [sauce, treats]],
+  };
+  for (const step of WAYS[x.kind][way]) step();
   // Protein that went away with the cuts and did not come with the food is topped up with whey.
   let add = null;
   const lack = cut.p - x.p, whey = PRODUCTS.find(p => /^Протеин сывороточный/.test(p.n));
-  if (lack > 8 && whey) {
+  if (x.kind !== 'swap' && lack > 8 && whey) {
     const g = Math.round(lack / (whey.p / whey.base) / 5) * 5, ahead = dayItems(d).filter(o => !(state.eaten[o.id] > 0));
-    if (g > 0 && ahead.length) add = { m: ahead[0].m, item: portionOf(whey, g) };
+    if (g > 0 && ahead.length) add = { m: ahead[0].m, item: portionOf(whey, g), on: true };
   }
-  return { changes, add, over: Math.round(over() + (add ? add.item.k : 0)) };
+  return { changes, add };
+}
+// All the different ways that change something, the usual one first.
+function rebalanceWays(x, d) {
+  const seen = new Set(), out = [];
+  for (let way = 0; way < 3; way++) {
+    const plan = rebalancePlan(x, d, way), key = JSON.stringify([plan.changes.map(c => [c.id, c.to]), plan.add && plan.add.item.a]);
+    if ((plan.changes.length || plan.add) && !seen.has(key)) { seen.add(key); out.push(plan); }
+  }
+  return out;
+}
+const leftOver = (x, plan) => Math.round(x.k - plan.changes.filter(c => c.on).reduce((sum, c) => sum + c.k, 0) + (plan.add && plan.add.on ? plan.add.item.k : 0));
+function offerRebalance(x, d, holder) {
+  const ways = rebalanceWays(x, d);
+  if (!ways.length) return false;
+  sheet = { mode: 'rebalance', x, d, holder, ways, way: 0 };
+  renderSheet();
+  return true;
 }
 function applyRebalance(x, d, plan) {
   x.adj = [];
-  for (const c of plan.changes) {
+  for (const c of plan.changes.filter(c => c.on)) {
     x.adj.push({ id: c.id, amt: state.amt[c.id] ?? null });
     if (c.to > 0) state.amt[c.id] = c.to; else state.removed[c.id] = true;
   }
-  if (plan.add) {
+  if (plan.add && plan.add.on) {
     const key = `d${d}m${plan.add.m}`, list = (state.adds[key] = state.adds[key] || []);
     list.push(plan.add.item);
     x.adj.push({ id: `${key}i${100 + list.length - 1}`, added: true });
@@ -447,12 +472,15 @@ function renderSheet() {
     return;
   }
   if (sheet.mode === 'rebalance') {
-    const r = sheet.plan, meal = r.add ? dayAt(sheet.d).meals[r.add.m].name : '';
-    s.innerHTML = sheetFrame('Пересчитать остаток дня?', `<p class="sub">Добавлено: ${esc(sheet.x.n)}, ${whole(sheet.x.k)} ккал. Чтобы день остался в плане, предлагаю:</p>
-      ${r.changes.map(c => `<div class="nextrow"><span>${esc(c.n)}</span><b>${c.to > 0 ? `${num(c.from)} → ${num(c.to)} ${esc(c.u)}` : 'убрать'}</b></div>`).join('')}
-      ${r.add ? `<div class="nextrow"><span>${esc(r.add.item.n)}, в «${esc(meal)}»</span><b>+ ${r.add.item.a} г</b></div>` : ''}
-      <p class="sub" style="margin-top:10px">${Math.abs(r.over) < 60 ? 'Калории дня сойдутся с планом.' : r.over > 0 ? `Останется лишних около ${r.over} ккал: убирать больше нечего.` : `Выйдет меньше плана примерно на ${-r.over} ккал.`} Съеденное не трогаю. Если потом убрать эту запись, план вернётся.</p>
-      <button type="button" class="btn small" data-act="dorebalance">Пересчитать</button>
+    const r = sheet.ways[sheet.way], x = sheet.x, over = leftOver(x, r), meal = r.add ? dayAt(sheet.d).meals[r.add.m].name : '';
+    const row = (i, on, name, what) => `<button type="button" class="rbrow${on ? '' : ' off'}" data-act="rbtoggle" data-i="${i}" aria-pressed="${on}"><span class="tick"><i>${on ? '✓' : ''}</i></span><span>${esc(name)}</span><b>${what}</b></button>`;
+    const any = r.changes.some(c => c.on) || (r.add && r.add.on);
+    s.innerHTML = sheetFrame('Пересчитать остаток дня?', `<p class="sub">${x.kind === 'swap' ? `Замена на «${esc(x.n)}» добавила ${whole(x.c)} г углеводов и ${whole(x.k)} ккал.` : `Добавлено: ${esc(x.n)}, ${whole(x.k)} ккал.`} Сними галочку с того, что менять не хочешь.</p>
+      ${r.changes.map((c, i) => row(i, c.on, `${c.n}, ${dayAt(sheet.d).meals[+c.id.match(/m(\d+)i/)[1]].name.toLowerCase()}`, c.to > 0 ? `${num(c.from)} → ${num(c.to)} ${esc(c.u)}` : 'убрать')).join('')}
+      ${r.add ? row('add', r.add.on, `${r.add.item.n}, в «${meal}»`, `+ ${r.add.item.a} г`) : ''}
+      <p class="sub" style="margin-top:10px">${Math.abs(over) < 60 ? 'Калории дня сойдутся с планом.' : over > 0 ? `Останется лишних около ${over} ккал.` : `Выйдет меньше плана примерно на ${-over} ккал.`} Съеденное не трогаю.</p>
+      ${sheet.ways.length > 1 ? `<button type="button" class="btn ghost small" data-act="rbnext">Другой вариант (${sheet.way + 1} из ${sheet.ways.length})</button>` : ''}
+      <button type="button" class="btn small" data-act="dorebalance"${any ? '' : ' disabled'}>Пересчитать</button>
       <button type="button" class="btn ghost small" data-act="closesheet">Оставить как есть</button>`);
     return;
   }
@@ -527,8 +555,7 @@ function addExtra(x) {
   }
   (state.extras[d] = state.extras[d] || []).push(x);
   save();
-  const plan = rebalancePlan(x, d);
-  if (plan.changes.length || plan.add) { sheet = { mode: 'rebalance', x, d, plan }; renderSheet(); } else closeSheet();
+  if (!offerRebalance({ ...x, kind: groupOf(x.n, x.cat) === 'sweet' ? 'sweet' : 'meal' }, d, x)) closeSheet();
 }
 
 // Each photo is kept twice: a small square for the list and a larger copy to open full screen.
@@ -798,7 +825,14 @@ document.addEventListener('click', e => {
     window.scrollTo(0, 0);
     return;
   }
-  if (act === 'dorebalance') { applyRebalance(sheet.x, sheet.d, sheet.plan); save(); closeSheet(); render(); toast('Остаток дня пересчитан'); return; }
+  if (act === 'dorebalance') { applyRebalance(sheet.holder, sheet.d, sheet.ways[sheet.way]); save(); closeSheet(); render(); toast('Остаток дня пересчитан'); return; }
+  if (act === 'rbnext') { sheet.way = (sheet.way + 1) % sheet.ways.length; renderSheet(); return; }
+  if (act === 'rbtoggle') {
+    const r = sheet.ways[sheet.way], c = el.dataset.i === 'add' ? r.add : r.changes[+el.dataset.i];
+    c.on = !c.on;
+    renderSheet();
+    return;
+  }
   if (act === 'remove') {
     state.removed[id] = true;
     delete state.eaten[id];
@@ -886,16 +920,20 @@ document.addEventListener('click', e => {
     return;
   }
   if (act === 'doswap') {
-    const o = swapOptions()[+el.dataset.i];
-    state.swaps[sheet.id] = o.x;
-    delete state.amt[sheet.id];
-    delete state.eaten[sheet.id];
+    const o = swapOptions()[+el.dataset.i], sid = sheet.id, was = findItem(sid), d = state.day;
+    if (state.swaps[sid]) undoRebalance(state.swaps[sid]);
+    state.swaps[sid] = o.x;
+    delete state.amt[sid];
+    delete state.eaten[sid];
     save();
     closeSheet();
     render();
+    // A swap that brings extra carbs is paid for by the side dish, like food from outside the plan.
+    const diff = k => +(o.x[k] - was[k]).toFixed(1);
+    if (diff('c') > 8) offerRebalance({ n: o.x.n, kind: 'swap', id: sid, m: +sid.match(/m(\d+)i/)[1], p: diff('p'), f: diff('f'), c: diff('c'), k: diff('k') }, d, o.x);
     return;
   }
-  if (act === 'unswap') { delete state.swaps[id]; delete state.amt[id]; delete state.eaten[id]; save(); render(); return; }
+  if (act === 'unswap') { if (state.swaps[id]) undoRebalance(state.swaps[id]); delete state.swaps[id]; delete state.amt[id]; delete state.eaten[id]; save(); render(); return; }
   if (act === 'delextra') { undoRebalance(extrasOf(state.day).splice(+el.dataset.i, 1)[0]); save(); render(); return; }
   if (act === 'day') { state.day = +el.dataset.d; open = null; save(); render(); window.scrollTo(0, 0); return; }
   if (act === 'tick') {
