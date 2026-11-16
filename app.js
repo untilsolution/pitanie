@@ -17,6 +17,10 @@ const SHOP = [
   { re: /^Пюре/, name: 'Пюре (картофель, лук, молоко, масло)', fmt: g => grams(g) },
   { re: /^Говядина/, name: 'Говядина', fmt: g => grams(g) },
   { re: /^Индейка духовая/, name: 'Индейка духовая Индилайт', fmt: g => grams(g) },
+  { re: /^Рис/, name: 'Рис', fmt: g => grams(g) },
+  { re: /^Гречка/, name: 'Гречка', fmt: g => grams(g) },
+  { re: /^Куриная грудка/, name: 'Куриная грудка', fmt: g => grams(g) },
+  { re: /^Соус терияки/, name: 'Соус терияки', fmt: g => grams(g) },
   { re: /^Тунец/, name: 'Тунец', fmt: g => `${Math.ceil(g / 185)} банк. по 185 г` },
 ];
 const liters = g => (g >= 1000 ? `${(g / 1000).toFixed(1).replace('.', ',')} л` : `${g} мл`);
@@ -31,7 +35,8 @@ function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* the page still works for this visit */ }
   if (window.Sync) Sync.changed();
 }
-const state = Object.assign({ eaten: {}, shop: {}, day: 0, view: 'plan', swaps: {}, extras: {} }, load());
+// mydays: days the user made himself. adds, removed, amt: his changes to any day (added products, removed ones, new portions).
+const state = Object.assign({ eaten: {}, shop: {}, day: 0, view: 'plan', swaps: {}, extras: {}, mydays: [], adds: {}, removed: {}, amt: {} }, load());
 let open = null;
 
 // Cooked weights and dishes outlive any single plan, so they have their own key.
@@ -40,20 +45,30 @@ let sharedMemory = {};
 function loadShared() {
   try { return JSON.parse(localStorage.getItem(SHARED)) || {}; } catch (e) { return sharedMemory; }
 }
-const shared = Object.assign({ yield: {}, yieldAt: {}, vessels: [], myfoods: [], raw: {} }, loadShared());
+const shared = Object.assign({ yield: {}, yieldAt: {}, vessels: [], myfoods: [], raw: {}, cookAdd: [], cookHide: [] }, loadShared());
 function saveShared() {
   sharedMemory = shared;
   try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
   if (window.Sync) Sync.changed();
 }
-const COOK = /^(Пюре|Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты)/;
+const COOK = /^(Пюре|Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты|Лазанья|Картофель жареный)/;
+// One-off food from outside is not cooked at home, so it never gets a weights card by itself.
+const NOT_COOKED = /«Вкусно и точка»|вялен|сушён|слабосол|копчён/i;
 const DRY = /^(Макароны|Рис|Гречка|Крупа|Овсян)/;
 // Mash is planned by the weight of its raw ingredients, like pasta and meat.
 const MASH = /^Пюре/;
 const rawWord = n => (DRY.test(n) ? 'сухого' : MASH.test(n) ? 'продуктов' : 'сырого');
 // showFrom: older days stay in the plan (their ticks keep their ids) but are hidden from the tabs.
 const SHOW_FROM = Math.min(PLAN.showFrom || 0, PLAN.days.length - 1);
-const cookables = () => [...new Set(PLAN.days.slice(SHOW_FROM).flatMap(d => d.meals.flatMap(m => m.items.map(it => it.n))).filter(n => COOK.test(n)))];
+// User-made days get numbers from MY up, so new plan days never collide with them.
+const MY = 1000;
+const dayAt = d => (d >= MY ? state.mydays[d - MY] : PLAN.days[d]);
+const dayIds = () => [...PLAN.days.map((x, d) => d).filter(d => d >= SHOW_FROM), ...(state.mydays || []).map((x, j) => (x ? MY + j : -1)).filter(d => d >= 0)];
+const cookables = () => {
+  const hide = shared.cookHide || [], own = (shared.cookAdd || []).map(x => x.n);
+  const auto = dayIds().flatMap(d => dayItems(d).map(o => o.it.n)).filter(n => COOK.test(n) && !NOT_COOKED.test(n) && !hide.includes(n));
+  return [...new Set([...auto, ...own])];
+};
 const cookedOf = (it, raw) => (shared.yield[it.n] ? Math.round(raw * shared.yield[it.n] / 100) : null);
 
 const $ = id => document.getElementById(id);
@@ -61,7 +76,26 @@ const num = x => (Math.round(x * 10) / 10).toString().replace('.', ',');
 const whole = x => Math.round(x).toString();
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const idOf = (d, m, i) => `d${d}m${m}i${i}`;
-const itemAt = (d, m, i) => state.swaps[idOf(d, m, i)] || PLAN.days[d].meals[m].items[i];
+const scaled = (it, a) => {
+  const k = a / it.a, r = x => +((x || 0) * k).toFixed(1);
+  return { ...it, a, p: r(it.p), f: r(it.f), c: r(it.c), k: r(it.k), fb: r(it.fb), was: it.a };
+};
+// The item as it stands now: a swap, an added product (numbers from 100) or the plan's own, at the portion the user set.
+function itemAt(d, m, i) {
+  const id = idOf(d, m, i);
+  const base = state.swaps[id] || (i >= 100 ? (state.adds[`d${d}m${m}`] || [])[i - 100] : dayAt(d).meals[m].items[i]);
+  const a = state.amt[id];
+  return base && a && a !== base.a ? scaled(base, a) : base;
+}
+function mealItems(d, m) {
+  const own = dayAt(d).meals[m].items.length, extra = (state.adds[`d${d}m${m}`] || []).length, out = [];
+  for (let n = 0; n < own + extra; n++) {
+    const i = n < own ? n : 100 + n - own, id = idOf(d, m, i);
+    if (!state.removed[id]) out.push({ m, i, id, it: itemAt(d, m, i) });
+  }
+  return out;
+}
+const dayItems = d => dayAt(d).meals.flatMap((meal, m) => mealItems(d, m));
 const extrasOf = d => state.extras[d] || [];
 // Ready-made food that is not in the table. Typical values, per 100 g.
 const READY_FOOD = [
@@ -74,15 +108,42 @@ const READY_FOOD = [
 const PRODUCTS = [];
 function rebuildProducts() {
   const mine = (shared.myfoods || []).map(p => ({ ...p, cat: 'Мои блюда', brand: '', freq: '', mine: true }));
+  const table = [...(window.PRODUCTS || []), ...READY_FOOD, ...mine], have = new Set(table.map(p => norm(p.n)));
+  // The reference list only fills gaps: the user's own numbers always win.
+  const ref = (window.FOODS || []).filter(f => !have.has(norm(f[0]))).map(([n, p, f, c, k, start]) => ({ cat: 'Справочник', n, brand: '', freq: '', base: 100, u: 'г', p, f, c, k, start, ref: true }));
   PRODUCTS.length = 0;
-  PRODUCTS.push(...[...(window.PRODUCTS || []), ...READY_FOOD, ...mine].sort((x, y) => x.n.localeCompare(y.n, 'ru')));
+  PRODUCTS.push(...[...table, ...ref].sort((x, y) => x.n.localeCompare(y.n, 'ru')));
 }
-rebuildProducts();
 const SWAPPABLE = /^(Мармелад|Чокопай|Шоколад|Зефир|Мёд|Джем|Пряники|Пломбир|Печенье|Банан|Яблоко|Киви|Апельсин|Мандарин|Слива|Грецкий|Миндаль|Фундук|Кедровые|Курага)/;
 const SWAP_CATS = ['Сладкое', 'Овощи и фрукты', 'Орехи и сухофрукты'];
 const label = p => p.n + (p.brand ? `, ${p.brand}` : '');
 // Search treats Ё and Е as the same letter, as people usually type Е.
-const norm = s => String(s).toLowerCase().replace(/ё/g, 'е');
+function norm(s) { return String(s).toLowerCase().replace(/ё/g, 'е'); }
+rebuildProducts();
+// Swap groups: a product is replaced only by one of its own kind. `by` says what stays equal: calories or protein.
+const GROUPS = {
+  sweet: { by: 'k', unit: 5, title: 'сладкое, фрукты и орехи' },
+  side: { by: 'k', unit: 5, title: 'гарниры' },
+  meat: { by: 'p', unit: 10, title: 'мясо и рыба' },
+  protein: { by: 'p', unit: 5, title: 'белковые продукты' },
+  sauce: { by: 'k', unit: 5, title: 'соусы' },
+};
+// Sweets and drinks from the reference list: eaten outside the plan, they are paid for with the plan's sweets.
+const SWEETS = /^(Торт|Чизкейк|Тирамису|Эклер|Пирожное|Мороженое|Вафли|Халва|Конфеты|Пончик|Круассан|Булочка|Сочник|Ватрушка|Попкорн|Кола|Сок |Морс|Компот|Энергетик|Шоколадный батончик)/;
+const G_SAUCE = /^(Соус|Кетчуп|Майонез|Горчица)/;
+const G_SIDE = /^(Макароны|Рис[ ,(]|Рис$|Гречка|Пюре|Картофель|Булгур|Кускус)/;
+const G_MEAT = /^(Куриная|Бёдра|Филе|Фарш|Рулетики|Говядина|Индейка|Наггетсы в|Курица|Свинина|Котлеты|Рыба красная|Креветки|Тунец)/;
+const G_PROTEIN = /^(Творожная запеканка|Творог|Сырники|Протеин|Сыр «Большой куш»|Сыр 20%|Йогурт 2%|Йогурт Teos|Белок яичный)/;
+function groupOf(n, cat) {
+  if (G_SAUCE.test(n)) return 'sauce';
+  if (G_SIDE.test(n)) return 'side';
+  if (G_MEAT.test(n)) return 'meat';
+  if (G_PROTEIN.test(n)) return 'protein';
+  if (SWAPPABLE.test(n) || SWEETS.test(n) || (SWAP_CATS.includes(cat) && !/^(Огурец|Сгущёнка)/.test(n))) return 'sweet';
+  return null;
+}
+const pieces = u => u !== 'г' && u !== 'мл';
+const unitOf = (n, u, g) => (pieces(u) ? 0.5 : /^Чокопай/.test(n) ? 30 : (GROUPS[g] || { unit: 5 }).unit);
 const portionOf = (p, a) => {
   const k = a / p.base;
   return { n: label(p), a, u: p.u, p: +(p.p * k).toFixed(1), f: +(p.f * k).toFixed(1), c: +(p.c * k).toFixed(1), k: +(p.k * k).toFixed(1), fb: 0,
@@ -101,10 +162,10 @@ const eatenOf = (id, it) => Math.min(state.eaten[id] || 0, it.a);
 
 function totals(d) {
   const t = { p: 0, f: 0, c: 0, k: 0, fb: 0 }, plan = { p: 0, f: 0, c: 0, k: 0, fb: 0 };
-  PLAN.days[d].meals.forEach((meal, m) => meal.items.forEach((orig, i) => {
-    const it = itemAt(d, m, i), part = eatenOf(idOf(d, m, i), it) / it.a;
-    for (const key in t) { t[key] += it[key] * part; plan[key] += it[key]; }
-  }));
+  dayItems(d).forEach(({ id, it }) => {
+    const part = eatenOf(id, it) / it.a;
+    for (const key in t) { t[key] += (it[key] || 0) * part; plan[key] += it[key] || 0; }
+  });
   extrasOf(d).forEach(x => { for (const key in t) t[key] += x[key] || 0; });
   return { t, plan };
 }
@@ -128,8 +189,9 @@ function itemHtml(d, m, i, it) {
   const cls = got >= it.a ? 'full' : got > 0 ? 'part' : '';
   const status = cls === 'part'
     ? `<small class="st">съел ${got} из ${it.a} ${it.u}, осталось ${it.a - got} ${it.u}</small>`
-    : `<small>${it.a} ${it.u} · ${whole(it.k)} ккал · Б ${num(it.p)} Ж ${num(it.f)} У ${num(it.c)}</small>`;
-  const step = it.u === 'кусок' ? 0.5 : it.a >= 100 ? 10 : 5;
+    : `<small>${it.a} ${it.u}${it.was ? ` (было ${it.was})` : ''} · ${whole(it.k)} ккал · Б ${num(it.p)} Ж ${num(it.f)} У ${num(it.c)}</small>`;
+  const step = pieces(it.u) ? 0.5 : it.a >= 100 ? 10 : 5;
+  const changed = state.swaps[id] || state.amt[id];
   const ready = cookedOf(it, cls === 'part' ? it.a - got : it.a);
   const readyLine = ready === null ? '' : `<small class="ck">${cls === 'part' ? 'осталось' : 'порция'} ${ready} г готового</small>`;
   const readyEdit = ready === null ? '' : `<div class="ckrow"><span>Готового съел</span>
@@ -141,12 +203,14 @@ function itemHtml(d, m, i, it) {
         <button type="button" data-act="plus" data-id="${id}" data-step="${step}" aria-label="Больше">+</button>
         <span>из ${it.a} ${it.u}</span>
       </div>${readyEdit}
+      <div class="ckrow"><span>Порция по плану</span>
+        <input type="number" inputmode="decimal" min="0" step="${step}" value="${it.a}" data-act="amt" data-id="${id}" aria-label="Порция по плану, ${it.u}"><span>${esc(it.u)}</span></div>
       <div class="chips">
-        ${SWAPPABLE.test(it.n) ? `<button type="button" data-act="swap" data-id="${id}">Заменить</button>` : ''}
-        ${state.swaps[id] ? `<button type="button" data-act="unswap" data-id="${id}">Вернуть как было</button>` : ''}
+        ${groupOf(it.n) ? `<button type="button" data-act="swap" data-id="${id}">Заменить</button>` : ''}
+        ${changed ? `<button type="button" data-act="unswap" data-id="${id}">Вернуть как было</button>` : ''}
         <button type="button" data-act="set" data-id="${id}" data-val="0">Не ел</button>
-        <button type="button" data-act="set" data-id="${id}" data-val="${it.u === 'кусок' ? it.a / 2 : Math.round(it.a / 2)}">Половина</button>
-        <button type="button" data-act="set" data-id="${id}" data-val="${it.a}">Всё</button>
+        <button type="button" data-act="set" data-id="${id}" data-val="${pieces(it.u) ? it.a / 2 : Math.round(it.a / 2)}">Половина</button>
+        <button type="button" data-act="remove" data-id="${id}">Убрать из дня</button>
       </div>
     </div>` : '';
   return `<div class="item ${cls}">
@@ -157,33 +221,36 @@ function itemHtml(d, m, i, it) {
 }
 
 function renderPlan() {
-  const d = state.day, day = PLAN.days[d];
+  const d = state.day, day = dayAt(d);
+  const viewer = window.Sync && Sync.viewer;
   const meals = day.meals.map((meal, m) => {
-    const list = meal.items.map((x, i) => itemAt(d, m, i));
-    const left = list.filter((it, i) => eatenOf(idOf(d, m, i), it) < it.a).length;
-    const kcal = list.reduce((s, it) => s + it.k, 0);
+    const list = mealItems(d, m);
+    if (!list.length && (viewer || d < MY)) return '';
+    const left = list.filter(o => eatenOf(o.id, o.it) < o.it.a).length;
+    const kcal = list.reduce((s, o) => s + o.it.k, 0);
     return `<section class="card meal">
-      <div class="mealhead"><h2>${esc(meal.name)}</h2><span>${left ? `осталось ${left} · ` : 'всё съедено · '}${whole(kcal)} ккал</span></div>
-      ${list.map((it, i) => itemHtml(d, m, i, it)).join('')}
+      <div class="mealhead"><h2>${esc(meal.name)}</h2><span>${!list.length ? 'пусто' : `${left ? `осталось ${left} · ` : 'всё съедено · '}${whole(kcal)} ккал`}</span></div>
+      ${list.map(o => itemHtml(d, m, o.i, o.it)).join('')}
+      ${viewer ? '' : `<button type="button" class="mealadd" data-act="addto" data-m="${m}">+ Добавить в «${esc(meal.name)}»</button>`}
     </section>`;
   }).join('');
-  const viewer = window.Sync && Sync.viewer;
   $('main').innerHTML = `${window.Sync ? Sync.bar() : ''}<h1>${esc(day.title)}</h1><p class="sub">${esc(day.note || '')}</p>
     ${viewer ? nextMealHtml(d) : window.Sync ? trainTop() : ''}${summary(d)}${meals}
     ${extrasHtml(d)}
     <div class="actions">
       ${viewer ? '' : '<button type="button" class="btn" data-act="extra">Съел вне плана</button>'}
       ${!viewer && window.Sync ? weightLink() : ''}
+      ${!viewer && d >= MY ? '<button type="button" class="btn ghost" data-act="delday">Удалить этот день</button>' : ''}
       <button type="button" class="btn ghost" data-act="sync">${esc(window.Sync ? Sync.buttonText() : 'Синхронизация')}</button>
     </div>`;
 }
 
 // For the person who serves the food: what is left in the next meal, in cooked grams.
 function nextMealHtml(d) {
-  const day = PLAN.days[d];
+  const day = dayAt(d);
   for (let m = 0; m < day.meals.length; m++) {
-    const rows = day.meals[m].items.map((x, i) => {
-      const it = itemAt(d, m, i), left = it.a - eatenOf(idOf(d, m, i), it);
+    const rows = mealItems(d, m).map(({ id, it }) => {
+      const left = it.a - eatenOf(id, it);
       if (left <= 0) return '';
       const ready = cookedOf(it, left);
       return `<div class="nextrow"><span>${esc(it.n)}</span><b>${ready === null ? `${num(left)} ${esc(it.u)}` : `${ready} г готового`}</b></div>`;
@@ -208,24 +275,116 @@ function extrasHtml(d) {
 let sheet = null;
 function closeSheet() { sheet = null; $('sheet').hidden = true; $('sheet').innerHTML = ''; document.body.classList.remove('locked'); }
 function swapOptions() {
-  const it = findItem(sheet.id), q = norm(sheet.q);
-  return PRODUCTS.filter(p => SWAP_CATS.includes(p.cat) && p.u === 'г' && p.k > 0 && !/Сгущёнка/.test(p.n)
-      && !label(p).startsWith(it.n) && norm(label(p)).includes(q))
+  const it = findItem(sheet.id), q = norm(sheet.q), g = groupOf(it.n), by = GROUPS[g].by;
+  return PRODUCTS.filter(p => !p.ref && groupOf(p.n, p.cat) === g && p[by] > 0 && p.k > 0
+      && !label(p).startsWith(it.n) && !it.n.startsWith(p.n) && !(g === 'side' && p.n.split(/[ ,]/)[0] === it.n.split(/[ ,]/)[0]) && norm(label(p)).includes(q))
     .map(p => {
-      const unit = /^Чокопай/.test(p.n) ? 30 : 5;
-      const a = Math.max(unit, Math.round(it.k / p.k * p.base / unit) * unit);
+      const unit = unitOf(p.n, p.u, g);
+      const a = Math.max(unit, Math.round(it[by] / p[by] * p.base / unit) * unit);
       return { p, a, x: portionOf(p, a) };
     });
 }
+
+// ---------- Eating outside the plan: trim what is still ahead today ----------
+const leftAhead = (d, g) => dayItems(d).filter(o => !(state.eaten[o.id] > 0) && groupOf(o.it.n) === g);
+const FRUIT = /^(Банан|Яблоко|Киви|Апельсин|Мандарин|Слива|Курага|Грецкий|Миндаль|Фундук|Кедровые)/;
+// Treats pay for treats; fruit and nuts go last, and only for another sweet.
+const treatsAhead = d => leftAhead(d, 'sweet').filter(o => !FRUIT.test(o.it.n));
+function rebalancePlan(x, d) {
+  const changes = [], cut = { p: 0, f: 0, c: 0, k: 0 };
+  // Take `need` of one macro out of the listed items, earliest meal first; a crumb of a portion goes entirely.
+  const cutBy = (list, key, need, crumb) => {
+    for (const o of list) {
+      const it = o.it, per = it[key] / it.a, unit = unitOf(it.n, it.u, groupOf(it.n));
+      if (need < per * unit / 2 || per <= 0) continue;
+      let g = Math.min(it.a, Math.round(need / per / unit) * unit);
+      if (it.a - g < crumb) g = it.a;
+      if (g <= 0) continue;
+      changes.push({ id: o.id, n: it.n, u: it.u, from: it.a, to: +(it.a - g).toFixed(1) });
+      for (const m in cut) cut[m] += it[m] * g / it.a;
+      need -= per * g;
+    }
+  };
+  const over = () => x.k - cut.k;
+  if (groupOf(x.n, x.cat) === 'sweet') {
+    cutBy(treatsAhead(d), 'k', x.k, 10);
+    if (over() > 60) cutBy(leftAhead(d, 'sweet').filter(o => FRUIT.test(o.it.n)), 'k', over(), 10);
+    if (over() > 60) cutBy(leftAhead(d, 'side'), 'k', over(), 30);
+  } else {
+    cutBy(leftAhead(d, 'side'), 'c', x.c, 30);
+    const meat = leftAhead(d, 'meat'), spare = x.p - cut.p;
+    if (over() > 60 && spare > 5 && meat.length) cutBy(meat, 'p', Math.min(spare, over() * meat[0].it.p / meat[0].it.k), 50);
+    if (over() > 60) cutBy(leftAhead(d, 'sauce'), 'k', over(), 10);
+    if (over() > 60) cutBy(treatsAhead(d), 'k', over(), 10);
+  }
+  // Protein that went away with the cuts and did not come with the food is topped up with whey.
+  let add = null;
+  const lack = cut.p - x.p, whey = PRODUCTS.find(p => /^Протеин сывороточный/.test(p.n));
+  if (lack > 8 && whey) {
+    const g = Math.round(lack / (whey.p / whey.base) / 5) * 5, ahead = dayItems(d).filter(o => !(state.eaten[o.id] > 0));
+    if (g > 0 && ahead.length) add = { m: ahead[0].m, item: portionOf(whey, g) };
+  }
+  return { changes, add, over: Math.round(over() + (add ? add.item.k : 0)) };
+}
+function applyRebalance(x, d, plan) {
+  x.adj = [];
+  for (const c of plan.changes) {
+    x.adj.push({ id: c.id, amt: state.amt[c.id] ?? null });
+    if (c.to > 0) state.amt[c.id] = c.to; else state.removed[c.id] = true;
+  }
+  if (plan.add) {
+    const key = `d${d}m${plan.add.m}`, list = (state.adds[key] = state.adds[key] || []);
+    list.push(plan.add.item);
+    x.adj.push({ id: `${key}i${100 + list.length - 1}`, added: true });
+  }
+}
+// Removing the food that caused a recount puts the plan back, unless those dishes were eaten since.
+function undoRebalance(x) {
+  for (const a of x.adj || []) {
+    if (state.eaten[a.id] > 0) continue;
+    if (a.added) { state.removed[a.id] = true; continue; }
+    delete state.removed[a.id];
+    if (a.amt === null) delete state.amt[a.id]; else state.amt[a.id] = a.amt;
+  }
+}
+
+// ---------- The user's own days ----------
+const WDAY = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'], WSHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const dateWord = dt => `${dt.getDate()} ${MONTHS[dt.getMonth()]}`;
+function freeDates() {
+  const used = dayIds().map(d => dayAt(d).title), out = [];
+  for (let i = 0; out.length < 5 && i < 14; i++) {
+    const dt = new Date();
+    dt.setDate(dt.getDate() + i);
+    if (!used.some(t => t.includes(` ${dateWord(dt)},`) || t.endsWith(` ${dateWord(dt)}`))) out.push(dt);
+  }
+  return out;
+}
+function createDay() {
+  const dt = freeDates()[sheet.date], src = sheet.from;
+  const meals = src === null
+    ? ['Завтрак', 'Второй завтрак', 'Обед', 'Полдник', 'Ужин'].map(name => ({ name, items: [] }))
+    : dayAt(src).meals.map((meal, m) => ({ name: meal.name, items: mealItems(src, m).map(({ it }) => { const copy = { ...it }; delete copy.was; return copy; }) })).filter(meal => meal.items.length);
+  state.mydays.push({ tab: `${WSHORT[dt.getDay()]} ${dt.getDate()}`, title: `${WDAY[dt.getDay()]} ${dateWord(dt)}, ${sheet.train ? 'тренировка' : 'без тренировки'}`, note: src === null ? 'Свой день' : `Свой день, за основу взят ${dayAt(src).tab}`, meals });
+  state.day = MY + state.mydays.length - 1;
+}
+function deleteDay(d) {
+  state.mydays[d - MY] = null;
+  for (const box of [state.eaten, state.swaps, state.amt, state.removed, state.adds]) Object.keys(box).filter(k => k.startsWith(`d${d}m`)).forEach(k => delete box[k]);
+  delete state.extras[d];
+  state.day = dayIds()[0];
+}
 function sheetList() {
   if (sheet.mode === 'swap') {
+    const it = findItem(sheet.id), diff = k => (Math.abs(k - it.k) < 15 ? '' : ` (${k > it.k ? '+' : '−'}${whole(Math.abs(k - it.k))})`);
     return swapOptions().map((o, i) => `<button type="button" class="pick" data-act="doswap" data-i="${i}">
-      <b>${esc(o.x.n)}${o.p.freq ? ` <em>${esc(o.p.freq.toLowerCase())}</em>` : ''}</b>
-      <small>${o.a} г · ${whole(o.x.k)} ккал · Б ${num(o.x.p)} Ж ${num(o.x.f)} У ${num(o.x.c)}</small></button>`).join('') || '<p class="sub">Ничего не нашлось</p>';
+      <b>${esc(o.x.n)}${o.p.freq ? ` <em>${esc(o.p.freq.toLowerCase())}</em>` : ''}${o.p.mine ? ' <em>моё</em>' : ''}</b>
+      <small>${num(o.a)} ${esc(o.p.u)} · ${whole(o.x.k)} ккал${diff(o.x.k)} · Б ${num(o.x.p)} Ж ${num(o.x.f)} У ${num(o.x.c)}</small></button>`).join('') || '<p class="sub">Ничего не нашлось</p>';
   }
   const q = norm(sheet.q);
   return PRODUCTS.map((p, i) => ({ p, i })).filter(o => norm(label(o.p)).includes(q)).map(o =>
-    `<button type="button" class="pick" data-act="pickextra" data-i="${o.i}"><b>${esc(label(o.p))}${o.p.mine ? ' <em>моё</em>' : ''}</b>
+    `<button type="button" class="pick" data-act="pickextra" data-i="${o.i}"><b>${esc(label(o.p))}${o.p.mine ? ' <em>моё</em>' : o.p.ref ? ' <em>примерно</em>' : ''}</b>
       <small>на ${o.p.base} ${o.p.u}: ${whole(o.p.k)} ккал · Б ${num(o.p.p)} Ж ${num(o.p.f)} У ${num(o.p.c)}</small></button>`).join('') || '<p class="sub">В таблице нет. Нажми «Найти в интернете».</p>';
 }
 function webList() {
@@ -244,18 +403,22 @@ async function webSearch() {
   $('webBox').innerHTML = webList();
   const stop = new AbortController(), timer = setTimeout(() => stop.abort(), 15000);
   try {
-    const url = 'https://ru.openfoodfacts.org/cgi/search.pl?search_simple=1&action=process&json=1&page_size=30&fields=product_name,brands,nutriments&search_terms=' + encodeURIComponent(q);
-    const data = await (await fetch(url, { signal: stop.signal })).json();
-    const seen = new Set();
-    const found = (data.products || []).map(x => {
-      const t = x.nutriments || {}, k = t['energy-kcal_100g'] ?? (t['energy_100g'] ? t['energy_100g'] / 4.184 : null);
-      return { n: (x.product_name || '').trim(), brand: (x.brands || '').split(',')[0].trim(), freq: '', base: 100, u: 'г', k, p: t.proteins_100g || 0, f: t.fat_100g || 0, c: t.carbohydrates_100g || 0 };
+    // Two sections of Open Food Facts are asked at once: the Russian one and the whole base. Either may fail on its own.
+    const ask = host => fetch(`https://${host}.openfoodfacts.org/cgi/search.pl?search_simple=1&action=process&json=1&page_size=30&fields=product_name,product_name_ru,brands,nutriments&search_terms=${encodeURIComponent(q)}`, { signal: stop.signal }).then(r => r.json());
+    const answers = await Promise.allSettled([ask('ru'), ask('world')]);
+    if (answers.every(a => a.status === 'rejected')) throw new Error('no answer');
+    const seen = new Set(), words = norm(q).split(/\s+/);
+    const found = answers.flatMap(a => (a.status === 'fulfilled' ? a.value.products || [] : [])).map(x => {
+      const t = x.nutriments || {}, p = t.proteins_100g || 0, f = t.fat_100g || 0, c = t.carbohydrates_100g || 0;
+      // Many entries have macros but no calories: then they are counted from the macros.
+      const k = t['energy-kcal_100g'] ?? (t['energy_100g'] ? t['energy_100g'] / 4.184 : p * 4 + f * 9 + c * 4);
+      return { n: (x.product_name_ru || x.product_name || '').trim(), brand: (x.brands || '').split(',')[0].trim(), freq: '', base: 100, u: 'г', k: Math.round(k), p, f, c };
     }).filter(p => {
       const key = `${label(p)}|${Math.round(p.k)}`.toLowerCase();
       if (!p.n || !p.k || seen.has(key)) return false;
       seen.add(key);
       return true;
-    }).slice(0, 12);
+    }).sort((a, b) => words.filter(w => norm(label(b)).includes(w)).length - words.filter(w => norm(label(a)).includes(w)).length).slice(0, 20);
     if (!sheet) return;
     sheet.web = found;
     sheet.webState = found.length ? '' : 'empty';
@@ -283,6 +446,25 @@ function renderSheet() {
       <button type="button" class="btn ghost small" data-act="savekey" data-role="shop">Только покупки</button>`}`);
     return;
   }
+  if (sheet.mode === 'rebalance') {
+    const r = sheet.plan, meal = r.add ? dayAt(sheet.d).meals[r.add.m].name : '';
+    s.innerHTML = sheetFrame('Пересчитать остаток дня?', `<p class="sub">Добавлено: ${esc(sheet.x.n)}, ${whole(sheet.x.k)} ккал. Чтобы день остался в плане, предлагаю:</p>
+      ${r.changes.map(c => `<div class="nextrow"><span>${esc(c.n)}</span><b>${c.to > 0 ? `${num(c.from)} → ${num(c.to)} ${esc(c.u)}` : 'убрать'}</b></div>`).join('')}
+      ${r.add ? `<div class="nextrow"><span>${esc(r.add.item.n)}, в «${esc(meal)}»</span><b>+ ${r.add.item.a} г</b></div>` : ''}
+      <p class="sub" style="margin-top:10px">${Math.abs(r.over) < 60 ? 'Калории дня сойдутся с планом.' : r.over > 0 ? `Останется лишних около ${r.over} ккал: убирать больше нечего.` : `Выйдет меньше плана примерно на ${-r.over} ккал.`} Съеденное не трогаю. Если потом убрать эту запись, план вернётся.</p>
+      <button type="button" class="btn small" data-act="dorebalance">Пересчитать</button>
+      <button type="button" class="btn ghost small" data-act="closesheet">Оставить как есть</button>`);
+    return;
+  }
+  if (sheet.mode === 'newday') {
+    const dates = freeDates(), chip = (k, v, text, on) => `<button type="button" class="${on ? 'on' : ''}" data-act="nd" data-k="${k}" data-v="${v}" aria-pressed="${on}">${esc(text)}</button>`;
+    s.innerHTML = sheetFrame('Новый день', `<p class="sub">День составляешь сам: продукты добавляются, заменяются и убираются.</p>
+      <h3>Дата</h3><div class="chips cmode">${dates.map((dt, i) => chip('date', i, `${WSHORT[dt.getDay()]} ${dt.getDate()}`, sheet.date === i)).join('')}</div>
+      <h3>День</h3><div class="chips cmode">${chip('train', 1, 'Тренировка', sheet.train)}${chip('train', 0, 'Без тренировки', !sheet.train)}</div>
+      <h3>Взять за основу</h3><div class="chips cmode">${chip('from', '', 'Пустой', sheet.from === null)}${dayIds().map(d => chip('from', d, dayAt(d).tab, sheet.from === d)).join('')}</div>
+      <button type="button" class="btn small" data-act="createday" style="margin-top:14px">Создать день</button>`);
+    return;
+  }
   if (sheet.mode === 'editextra') {
     const x = extrasOf(state.day)[sheet.i], src = srcOf(x);
     s.innerHTML = sheetFrame('Изменить', `<label class="field col"><span>Название</span><input type="text" id="cName" value="${esc(x.n)}" data-act="calcinput" aria-label="Название"></label>
@@ -294,16 +476,17 @@ function renderSheet() {
   }
   if (sheet.mode === 'swap') {
     const it = findItem(sheet.id);
+    const g = GROUPS[groupOf(it.n)];
     title = `Заменить: ${it.n}`;
-    body = `<p class="sub">Порции подобраны на те же ${whole(it.k)} ккал.</p>`;
+    body = `<p class="sub">Показаны ${g.title}. ${g.by === 'k' ? `Порции подобраны на те же ${whole(it.k)} ккал.` : `Порции подобраны на тот же белок, ${whole(it.p)} г, в скобках разница в калориях.`}</p>`;
   } else {
-    title = 'Съел вне плана';
+    title = sheet.target === undefined ? 'Съел вне плана' : `Добавить в «${dayAt(state.day).meals[sheet.target].name}»`;
     body = '';
   }
   if (sheet.pick) {
     const p = sheet.pick, start = p.start || (p.base === 100 ? 100 : 1);
     body = `<h3>${esc(label(p))}</h3>
-      <label class="field"><span>Сколько съел</span><input type="number" inputmode="decimal" min="0" id="xAmount" value="${start}" data-act="xamount" aria-label="Количество"><span>${esc(p.u)}</span></label>
+      <label class="field"><span>${sheet.target === undefined ? 'Сколько съел' : 'Порция'}</span><input type="number" inputmode="decimal" min="0" id="xAmount" value="${start}" data-act="xamount" aria-label="Количество"><span>${esc(p.u)}</span></label>
       <p class="sub" id="xInfo"></p>
       <button type="button" class="btn small" data-act="addpicked">Добавить</button>
       <button type="button" class="btn ghost small" data-act="backpick">Другой продукт</button>
@@ -332,10 +515,20 @@ function renderSheet() {
 const sheetFrame = (title, body) => `<div class="sheetbox" role="dialog" aria-label="${esc(title)}">
   <div class="sheethead"><h2>${esc(title)}</h2><button type="button" data-act="closesheet">Закрыть</button></div>
   <div class="sheetbody">${body}</div></div>`;
+// Food goes either into a meal of the plan (the user builds the day) or to "outside the plan" (then the rest is recounted).
 function addExtra(x) {
-  (state.extras[state.day] = state.extras[state.day] || []).push(x);
+  const d = state.day;
+  if (sheet.target !== undefined) {
+    const key = `d${d}m${sheet.target}`;
+    (state.adds[key] = state.adds[key] || []).push(x);
+    save();
+    closeSheet();
+    return;
+  }
+  (state.extras[d] = state.extras[d] || []).push(x);
   save();
-  closeSheet();
+  const plan = rebalancePlan(x, d);
+  if (plan.changes.length || plan.add) { sheet = { mode: 'rebalance', x, d, plan }; renderSheet(); } else closeSheet();
 }
 
 // Each photo is kept twice: a small square for the list and a larger copy to open full screen.
@@ -373,14 +566,14 @@ function shoppingList() {
   const sums = new Map();
   // shopFrom: when days are added to a running plan, shop only for the new days, with their own ticks.
   const from = PLAN.shopFrom || 0;
-  PLAN.days.slice(from).forEach(day => day.meals.forEach(meal => meal.items.forEach(it => {
+  dayIds().filter(d => d >= from).forEach(d => dayItems(d).forEach(({ it }) => {
     const rule = SHOP.find(r => r.re.test(it.n));
     if (!rule) return;
     const name = rule.name || it.n;
     const row = sums.get(name) || { name, key: from ? `${from}:${name}` : name, g: 0, fmt: rule.fmt };
     row.g += it.a;
     sums.set(name, row);
-  })));
+  }));
   return [...sums.values()];
 }
 
@@ -390,7 +583,7 @@ function renderShop() {
     return `<button type="button" class="shop ${done ? 'done' : ''}" data-act="shop" data-name="${esc(r.key)}" aria-pressed="${done}">
       <span class="tick"><i>${done ? '✓' : ''}</i></span><span>${esc(r.name)}</span><span class="amt">${r.fmt(r.g)}</span></button>`;
   }).join('');
-  const days = PLAN.days.slice(PLAN.shopFrom || 0), span = days.length > 1 ? `${days[0].tab}–${days[days.length - 1].tab}` : days[0].tab;
+  const days = dayIds().filter(d => d >= (PLAN.shopFrom || 0)).map(dayAt), span = days.length > 1 ? `${days[0].tab}–${days[days.length - 1].tab}` : days[0].tab;
   $('main').innerHTML = `${window.Sync ? Sync.bar() : ''}<h1>Покупки</h1><p class="sub">На дни ${esc(span)}. Орехи и мюсли не считаем.</p>
     <section class="card">${rows}</section>`;
 }
@@ -434,9 +627,11 @@ function renderGrams() {
         <button type="button" class="btn small" data-act="calc">Посчитать</button>
       </details>
       ${y || raw ? `<button type="button" class="btn ghost small" data-act="clearyield" data-name="${esc(n)}">Стереть, сварю новые</button>` : ''}
+      <button type="button" class="rawbtn" data-act="hidecook" data-name="${esc(n)}">Убрать блюдо из граммовок</button>
     </section>`;
   };
-  const all = cookables();
+  const all = cookables(), isSide = n => ((shared.cookAdd || []).find(x => x.n === n) || { side: SIDE.test(n) }).side;
+  const others = [...new Set(dayIds().flatMap(d => dayItems(d).map(o => o.it.n)))].filter(n => !all.includes(n)).sort((a, b) => a.localeCompare(b, 'ru'));
   const group = (key, title, names) => {
     if (!names.length) return '';
     const brief = names.map(n => `${dishName(n).replace(/,.*$/, '')}${shared.yield[n] ? ` ${shared.yield[n]} г` : ''}`).join(' · ');
@@ -453,8 +648,18 @@ function renderGrams() {
     return list.length ? `<h3 class="vcat">${c}</h3>${list.map(o => row(o.v, o.i)).join('')}` : '';
   }).join('');
   $('main').innerHTML = `<h1>Граммовки</h1><p class="sub">Впиши, сколько выходит готового, и рацион сам покажет порции.</p>
-    ${group('side', 'Гарниры', all.filter(n => SIDE.test(n)))}
-    ${group('main', 'Мясо и основные блюда', all.filter(n => !SIDE.test(n)))}
+    ${group('side', 'Гарниры', all.filter(n => isSide(n)))}
+    ${group('main', 'Мясо и основные блюда', all.filter(n => !isSide(n)))}
+    <details class="group"><summary><span><b>Добавить блюдо</b><small>Своё блюдо в гарниры или в основные</small></span></summary>
+      <section class="card cook">
+        <label class="field col"><span>Из плана</span><select id="cookPick" data-act="calcinput" aria-label="Блюдо из плана"><option value="">Выбери блюдо</option>${others.map(n => `<option>${esc(n)}</option>`).join('')}</select></label>
+        <label class="field col"><span>Или своё название</span><input type="text" id="cookName" data-act="calcinput" placeholder="Например, плов" aria-label="Название блюда"></label>
+        <div class="chips cmode" role="group" aria-label="Куда добавить">
+          <button type="button" class="on" data-act="cmode" data-m="main" aria-pressed="true">Мясо и основные блюда</button>
+          <button type="button" data-act="cmode" data-m="side" aria-pressed="false">Гарниры</button>
+        </div>
+        <button type="button" class="btn small" data-act="addcook">Добавить в граммовки</button>
+      </section></details>
     <h1>Посуда</h1><p class="sub">Вес кастрюль и тарелок хранится всегда, при смене плана не пропадает.</p>
     <section class="card cook">
       ${vesselGroups || '<p class="sub" style="margin:0 0 10px">Пока пусто.</p>'}
@@ -467,8 +672,10 @@ function renderGrams() {
 
 function render() {
   $('days').hidden = state.view !== 'plan';
-  $('days').innerHTML = PLAN.days.map((day, d) => d < SHOW_FROM ? '' :
-    `<button type="button" class="day" role="tab" data-act="day" data-d="${d}" aria-selected="${d === state.day}">${esc(day.tab)}</button>`).join('');
+  if (!dayAt(state.day)) state.day = dayIds()[0];
+  $('days').innerHTML = dayIds().map(d =>
+    `<button type="button" class="day" role="tab" data-act="day" data-d="${d}" aria-selected="${d === state.day}">${esc(dayAt(d).tab)}</button>`).join('')
+    + (window.Sync && Sync.viewer ? '' : '<button type="button" class="day dayadd" data-act="newday" aria-label="Добавить день">+</button>');
   $('tabPlan').setAttribute('aria-current', state.view === 'plan' ? 'page' : 'false');
   $('tabGrams').setAttribute('aria-current', state.view === 'grams' ? 'page' : 'false');
   $('tabShop').setAttribute('aria-current', state.view === 'shop' ? 'page' : 'false');
@@ -487,7 +694,7 @@ function findItem(id) {
 function setEaten(id, value) {
   const it = findItem(id);
   const n = Number(value) || 0;
-  const v = Math.max(0, Math.min(it.a, it.u === 'кусок' ? Math.round(n * 2) / 2 : Math.round(n)));
+  const v = Math.max(0, Math.min(it.a, pieces(it.u) ? Math.round(n * 2) / 2 : Math.round(n)));
   if (v) state.eaten[id] = v; else delete state.eaten[id];
   save();
 }
@@ -500,11 +707,13 @@ function toast(text) {
 }
 
 function dayText(d) {
-  const day = PLAN.days[d], { t, plan } = totals(d), lines = [`${day.title}`];
+  const day = dayAt(d), { t, plan } = totals(d), lines = [`${day.title}`];
   day.meals.forEach((meal, m) => {
+    const list = mealItems(d, m);
+    if (!list.length) return;
     lines.push(`${meal.name}:`);
-    meal.items.forEach((orig, i) => {
-      const it = itemAt(d, m, i), got = eatenOf(idOf(d, m, i), it);
+    list.forEach(({ id, it }) => {
+      const got = eatenOf(id, it);
       lines.push(`- ${it.n}: ${got >= it.a ? `съел ${it.a} ${it.u}` : got > 0 ? `съел ${got} из ${it.a} ${it.u}` : 'не ел'}`);
     });
   });
@@ -521,7 +730,7 @@ function dayText(d) {
 const VIEWER_OK = new Set(['day', 'sync', 'closesheet', 'savekey', 'pickv', 'vfilter', 'viewphoto', 'closephoto']);
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
-  if (!el || ['input', 'cookedinput', 'yield', 'rawsave', 'calcinput', 'sheetsearch', 'xamount', 'vphoto'].includes(el.dataset.act)) return;
+  if (!el || ['input', 'amt', 'cookedinput', 'yield', 'rawsave', 'calcinput', 'sheetsearch', 'xamount', 'vphoto'].includes(el.dataset.act)) return;
   const { act, id } = el.dataset;
   if (act === 'viewphoto') { openPhoto(shared.vessels[+el.dataset.i]); return; }
   if (act === 'closephoto') { document.querySelectorAll('.photoview').forEach(b => b.remove()); document.body.classList.remove('locked'); return; }
@@ -567,6 +776,56 @@ document.addEventListener('click', e => {
     return;
   }
   if (act === 'extra') { sheet = { mode: 'extra', q: '' }; renderSheet(); return; }
+  if (act === 'addto') { sheet = { mode: 'extra', q: '', target: +el.dataset.m }; renderSheet(); return; }
+  if (act === 'newday') {
+    if (!freeDates().length) { toast('На ближайшие две недели дни уже есть'); return; }
+    sheet = { mode: 'newday', date: 0, train: false, from: null };
+    renderSheet();
+    return;
+  }
+  if (act === 'nd') {
+    const v = el.dataset.v;
+    sheet[el.dataset.k] = el.dataset.k === 'from' ? (v === '' ? null : +v) : el.dataset.k === 'train' ? v === '1' : +v;
+    renderSheet();
+    return;
+  }
+  if (act === 'createday') { createDay(); save(); closeSheet(); open = null; render(); window.scrollTo(0, 0); return; }
+  if (act === 'delday') {
+    if (!confirm('Удалить этот день вместе с отметками?')) return;
+    deleteDay(state.day);
+    save();
+    render();
+    window.scrollTo(0, 0);
+    return;
+  }
+  if (act === 'dorebalance') { applyRebalance(sheet.x, sheet.d, sheet.plan); save(); closeSheet(); render(); toast('Остаток дня пересчитан'); return; }
+  if (act === 'remove') {
+    state.removed[id] = true;
+    delete state.eaten[id];
+    open = null;
+    save();
+    render();
+    toast('Убрано из дня');
+    return;
+  }
+  if (act === 'hidecook') {
+    const n = el.dataset.name;
+    shared.cookAdd = (shared.cookAdd || []).filter(x => x.n !== n);
+    if (!(shared.cookHide || []).includes(n)) (shared.cookHide = shared.cookHide || []).push(n);
+    saveShared();
+    render();
+    return;
+  }
+  if (act === 'addcook') {
+    const n = $('cookName').value.trim() || $('cookPick').value;
+    if (!n) { toast('Выбери блюдо или впиши название'); return; }
+    shared.cookHide = (shared.cookHide || []).filter(x => x !== n);
+    shared.cookAdd = (shared.cookAdd || []).filter(x => x.n !== n).concat({ n, side: el.closest('.cook').querySelector('.cmode .on').dataset.m === 'side' });
+    gramsOpen[shared.cookAdd[shared.cookAdd.length - 1].side ? 'side' : 'main'] = true;
+    saveShared();
+    render();
+    return;
+  }
   if (act === 'swap') { sheet = { mode: 'swap', id, q: '' }; renderSheet(); return; }
   if (act === 'closesheet') { closeSheet(); return; }
   if (act === 'pickextra') { sheet.pick = PRODUCTS[+el.dataset.i]; renderSheet(); return; }
@@ -617,7 +876,7 @@ document.addEventListener('click', e => {
     if (src) {
       const g = Number($('xAmount').value) || 0;
       if (g <= 0) { toast('Впиши количество'); return; }
-      list[sheet.i] = { ...portionOf({ n, brand: '', base: src.base, u: src.u, ...v }, g) };
+      list[sheet.i] = { ...portionOf({ n, brand: '', base: src.base, u: src.u, ...v }, g), ...(x.adj ? { adj: x.adj } : {}) };
     } else {
       list[sheet.i] = { ...x, n, ...v };
     }
@@ -629,14 +888,15 @@ document.addEventListener('click', e => {
   if (act === 'doswap') {
     const o = swapOptions()[+el.dataset.i];
     state.swaps[sheet.id] = o.x;
+    delete state.amt[sheet.id];
     delete state.eaten[sheet.id];
     save();
     closeSheet();
     render();
     return;
   }
-  if (act === 'unswap') { delete state.swaps[id]; delete state.eaten[id]; save(); render(); return; }
-  if (act === 'delextra') { extrasOf(state.day).splice(+el.dataset.i, 1); save(); render(); return; }
+  if (act === 'unswap') { delete state.swaps[id]; delete state.amt[id]; delete state.eaten[id]; save(); render(); return; }
+  if (act === 'delextra') { undoRebalance(extrasOf(state.day).splice(+el.dataset.i, 1)[0]); save(); render(); return; }
   if (act === 'day') { state.day = +el.dataset.d; open = null; save(); render(); window.scrollTo(0, 0); return; }
   if (act === 'tick') {
     const it = findItem(id);
@@ -715,12 +975,21 @@ function saveRaw(t) {
 }
 document.addEventListener('change', e => {
   const t = e.target, act = t.dataset.act;
-  if (window.Sync && Sync.viewer && ['input', 'vphoto', 'cookedinput', 'yield', 'rawsave'].includes(act)) {
+  if (window.Sync && Sync.viewer && ['input', 'amt', 'vphoto', 'cookedinput', 'yield', 'rawsave'].includes(act)) {
     toast('Менять можно только на основном телефоне');
     render();
     return;
   }
   if (act === 'input') { setEaten(t.dataset.id, t.value); render(); }
+  if (act === 'amt') {
+    const id = t.dataset.id, it = findItem(id), a = Math.round((Number(t.value) || 0) * 10) / 10;
+    if (a <= 0) { toast('Чтобы убрать продукт, нажми «Убрать из дня»'); render(); return; }
+    if (a === (it.was || it.a) && !state.amt[id]) return;
+    state.amt[id] = a;
+    if (state.eaten[id] > a) state.eaten[id] = a;
+    save();
+    render();
+  }
   if (act === 'vphoto' && t.files[0]) {
     photoCopies(t.files[0]).then(copies => {
       Object.assign(shared.vessels[+t.dataset.i], copies);
@@ -750,10 +1019,9 @@ $('tabGrams').addEventListener('click', () => { state.view = 'grams'; save(); re
 $('tabTrain').addEventListener('click', () => { state.view = 'train'; save(); render(); window.scrollTo(0, 0); });
 $('tabShop').addEventListener('click', () => { state.view = 'shop'; save(); render(); window.scrollTo(0, 0); });
 
-if (state.day >= PLAN.days.length || state.day < SHOW_FROM) {
+if (!dayIds().includes(state.day)) {
   const today = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-  const i = PLAN.days.findIndex((day, d) => d >= SHOW_FROM && day.title.includes(' ' + today));
-  state.day = i >= 0 ? i : SHOW_FROM;
+  state.day = dayIds().find(d => dayAt(d).title.includes(' ' + today)) ?? dayIds()[0];
 }
 render();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
