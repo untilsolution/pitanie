@@ -46,7 +46,7 @@ let sharedMemory = {};
 function loadShared() {
   try { return JSON.parse(localStorage.getItem(SHARED)) || {}; } catch (e) { return sharedMemory; }
 }
-const shared = Object.assign({ yield: {}, yieldAt: {}, vessels: [], myfoods: [], raw: {}, cookAdd: [], cookHide: [] }, loadShared());
+const shared = Object.assign({ yield: {}, yieldAt: {}, vessels: [], myfoods: [], raw: {}, cookAdd: [], cookHide: [], cookSeen: [] }, loadShared());
 function saveShared() {
   sharedMemory = shared;
   try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
@@ -75,10 +75,16 @@ function dayAt(d) {
 }
 const isTrain = d => isTrainTitle(dayAt(d).title);
 const dayIds = () => [...PLAN.days.map((x, d) => d).filter(d => d >= SHOW_FROM), ...(state.mydays || []).map((x, j) => (x ? MY + j : -1)).filter(d => d >= 0)];
+// Dishes the user cooks now and then stay in the grams list even when the current days lack them.
+const COOK_KEEP = ['Макароны (сухие)', 'Гречка ядрица (сухая)', 'Индейка духовая Индилайт'];
+// The grams list only grows: a dish once seen stays (shared.cookSeen) until the user hides it himself.
 const cookables = () => {
   const hide = shared.cookHide || [], own = (shared.cookAdd || []).map(x => x.n);
-  const auto = dayIds().flatMap(d => dayItems(d).map(o => o.it.n)).filter(n => COOK.test(n) && !NOT_COOKED.test(n) && !hide.includes(n));
-  return [...new Set([...auto, ...own])];
+  const now = [...dayIds().flatMap(d => dayItems(d).map(o => o.it.n)), ...PLAN.days.flatMap(day => day.meals.flatMap(meal => meal.items.map(it => it.n))), ...Object.keys(shared.yield || {})]
+    .filter(n => COOK.test(n) && !NOT_COOKED.test(n));
+  const seen = shared.cookSeen || [], fresh = [...new Set([...COOK_KEEP, ...now])].filter(n => !seen.includes(n));
+  if (fresh.length && !(window.Sync && Sync.viewer)) { shared.cookSeen = [...seen, ...fresh]; saveShared(); }
+  return [...new Set([...now, ...seen, ...fresh, ...own])].filter(n => !hide.includes(n));
 };
 const cookedOf = (it, raw) => (shared.yield[it.n] ? Math.round(raw * shared.yield[it.n] / 100) : null);
 

@@ -48,7 +48,7 @@ window.Sync = (() => {
       plan: PLAN.id, eaten: state.eaten, swaps: state.swaps, extras: state.extras,
       mydays: state.mydays, adds: state.adds, removed: state.removed, amt: state.amt, train: state.train, trainAdj: state.trainAdj,
       yield: shared.yield, vessels: shared.vessels, myfoods: shared.myfoods || [], raw: shared.raw || {}, yieldAt: shared.yieldAt || {},
-      cookAdd: shared.cookAdd || [], cookHide: shared.cookHide || [],
+      cookAdd: shared.cookAdd || [], cookHide: shared.cookHide || [], cookSeen: shared.cookSeen || [],
       days: [...PLAN.days.map((x, d) => d), ...state.mydays.map((x, j) => (x ? MY + j : -1)).filter(d => d >= 0)].map(d => ({ title: dayAt(d).title, text: marked(d) ? dayText(d) : null })),
     };
   }
@@ -70,6 +70,8 @@ window.Sync = (() => {
     if (Array.isArray(data.mydays)) state.mydays = data.mydays.map(day => (meals(day) ? day : null));
     if (Array.isArray(data.cookAdd)) shared.cookAdd = data.cookAdd.filter(x => x && x.n).map(x => ({ n: String(x.n), side: !!x.side }));
     if (Array.isArray(data.cookHide)) shared.cookHide = data.cookHide.map(String);
+    // The list of dishes ever seen only grows, so a phone never loses one another phone kept.
+    if (Array.isArray(data.cookSeen)) shared.cookSeen = [...new Set([...(shared.cookSeen || []), ...data.cookSeen.map(String)])];
     if (plain(data.yield)) shared.yield = data.yield;
     if (plain(data.raw)) shared.raw = data.raw;
     if (plain(data.yieldAt)) shared.yieldAt = data.yieldAt;
