@@ -112,8 +112,8 @@ const extrasOf = d => state.extras[d] || [];
 const READY_FOOD = [
   { cat: 'Готовая еда', n: 'Шаурма с курицей', brand: '', freq: '', base: 100, u: 'г', p: 8.5, f: 8, c: 22, k: 190, start: 350 },
   { cat: 'Готовая еда', n: 'Картофель фри', brand: '', freq: '', base: 100, u: 'г', p: 3, f: 15, c: 40, k: 310, start: 100 },
-  { cat: 'Готовая еда', n: 'Сухарики к пиву', brand: '', freq: '', base: 100, u: 'г', p: 10.1, f: 8.4, c: 67.7, k: 386, start: 50 },
-  { cat: 'Готовая еда', n: 'Щёчки судака сушёные', brand: '', freq: '', base: 100, u: 'г', p: 55, f: 3, c: 0, k: 250, start: 75 },
+  { cat: 'Закуски', n: 'Сухарики к пиву', brand: '', freq: '', base: 100, u: 'г', p: 10.1, f: 8.4, c: 67.7, k: 386, start: 50 },
+  { cat: 'Закуски', n: 'Щёчки судака сушёные', brand: '', freq: '', base: 100, u: 'г', p: 55, f: 3, c: 0, k: 250, start: 75 },
 ];
 // The product list: the table, ready-made food and the dishes the user saved. Rebuilt in place when "my dishes" change.
 const PRODUCTS = [];
@@ -141,6 +141,7 @@ const GROUPS = {
   cereal: { by: 'k', unit: 5, title: 'хлопья, подушечки, шарики и мюсли' },
   milk: { by: 'k', unit: 50, title: 'молоко и кисломолочное' },
   cold: { by: 'p', unit: 5, title: 'ветчина и колбасы' },
+  ready: { by: 'k', unit: 10, title: 'готовая еда' },
 };
 // Sweets and drinks from the reference list: eaten outside the plan, they are paid for with the plan's sweets.
 const SWEETS = /^(Торт|Чизкейк|Тирамису|Эклер|Пирожное|Мороженое|Вафли|Халва|Конфеты|Пончик|Круассан|Булочка|Сочник|Ватрушка|Попкорн|Кола|Сок |Морс|Компот|Энергетик|Шоколадный батончик)/;
@@ -153,6 +154,8 @@ const G_COLD = /^(Ветчина|Колбаски|Молочная колбас�
 const G_MEAT = /^(Куриная|Бёдра|Филе|Фарш|Рулетики|Говядина|Индейка|Наггетсы в|Курица|Свинина|Котлеты|Рыба красная|Креветки|Тунец)/;
 const G_PROTEIN = /^(Творожная запеканка|Творог|Сырники|Протеин|Сыр «Большой куш»|Сыр 20%|Йогурт 2%|Йогурт Teos|Белок яичный)/;
 function groupOf(n, cat) {
+  // Ready dishes (burgers, roti, lasagna, fast food) swap among themselves by calories.
+  if (cat === 'Готовая еда') return 'ready';
   if (G_SAUCE.test(n)) return 'sauce';
   if (G_CEREAL.test(n)) return 'cereal';
   if (G_MILK.test(n)) return 'milk';
@@ -363,14 +366,14 @@ function extrasHtml(d) {
 let sheet = null;
 function closeSheet() { sheet = null; $('sheet').hidden = true; $('sheet').innerHTML = ''; document.body.classList.remove('locked'); }
 function swapOptions() {
-  const it = findItem(sheet.id), q = norm(sheet.q), g = groupOf(it.n), cat = (productOf(it.n) || {}).cat;
+  const it = findItem(sheet.id), q = norm(sheet.q), cat = (productOf(it.n) || {}).cat, g = groupOf(it.n, cat);
   // «Похожие»: the same group, or the same table category for products outside the groups. «Все»: anything, by calories.
   const by = g && !sheet.all ? GROUPS[g].by : 'k';
   const fits = p => (sheet.all ? true : g ? groupOf(p.n, p.cat) === g : p.cat === cat);
   const same = p => label(p).startsWith(it.n) || it.n.startsWith(p.n) || (DRY.test(it.n) && p.n.split(/[ ,]/)[0] === it.n.split(/[ ,]/)[0]);
-  // Fast food is a one-off, not something to cook instead: it shows only under «Все продукты».
+  // Fast food is a one-off, not something to cook instead: for other products it shows only under «Все продукты».
   const fast = p => /Вкусно и точка|фри$/i.test(label(p)) || p.cat === 'Готовая еда';
-  return PRODUCTS.filter(p => !p.ref && fits(p) && (sheet.all || !fast(p)) && p[by] > 0 && p.k > 0 && !same(p) && norm(label(p)).includes(q))
+  return PRODUCTS.filter(p => !p.ref && fits(p) && (sheet.all || g === 'ready' || !fast(p)) && p[by] > 0 && p.k > 0 && !same(p) && norm(label(p)).includes(q))
     .map(p => {
       const unit = unitOf(p.n, p.u, groupOf(p.n, p.cat));
       const a = Math.max(unit, Math.round(it[by] / p[by] * p.base / unit) * unit);
@@ -794,7 +797,7 @@ function renderSheet() {
     return;
   }
   if (sheet.mode === 'swap') {
-    const it = findItem(sheet.id), g = GROUPS[groupOf(it.n)], cat = (productOf(it.n) || {}).cat, byP = g && g.by === 'p' && !sheet.all;
+    const it = findItem(sheet.id), cat = (productOf(it.n) || {}).cat, g = GROUPS[groupOf(it.n, cat)], byP = g && g.by === 'p' && !sheet.all;
     title = `Заменить: ${it.n}`;
     body = `<div class="chips cmode" role="group" aria-label="Что показать">
         <button type="button" class="${sheet.all ? '' : 'on'}" data-act="swapall" data-v="0" aria-pressed="${!sheet.all}">${esc(g ? g.title[0].toUpperCase() + g.title.slice(1) : cat || 'Похожие')}</button>
