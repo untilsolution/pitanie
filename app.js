@@ -192,28 +192,81 @@ const macroInputs = (v = {}) => `<div class="grid4">
 const readMacros = () => ({ p: Number($('cP').value) || 0, f: Number($('cF').value) || 0, c: Number($('cC').value) || 0, k: Number($('cK').value) || 0 });
 const eatenOf = (id, it) => Math.min(state.eaten[id] || 0, it.a);
 
+// t: eaten; plan: the day's norm as the plan wrote it, which removing, swapping or resizing never moves;
+// now: what the day holds at the moment, with the user's changes.
 function totals(d) {
-  const t = { p: 0, f: 0, c: 0, k: 0, fb: 0 }, plan = { p: 0, f: 0, c: 0, k: 0, fb: 0 };
+  const t = { p: 0, f: 0, c: 0, k: 0, fb: 0 }, plan = { p: 0, f: 0, c: 0, k: 0, fb: 0 }, now = { p: 0, f: 0, c: 0, k: 0, fb: 0 };
   dayItems(d).forEach(({ id, it }) => {
     const part = eatenOf(id, it) / it.a;
-    for (const key in t) { t[key] += (it[key] || 0) * part; plan[key] += it[key] || 0; }
+    for (const key in t) { t[key] += (it[key] || 0) * part; now[key] += it[key] || 0; }
   });
+  dayAt(d).meals.forEach(meal => meal.items.forEach(it => { for (const key in plan) plan[key] += it[key] || 0; }));
   extrasOf(d).forEach(x => { for (const key in t) t[key] += x[key] || 0; });
-  return { t, plan };
+  return { t, plan, now };
+}
+// What the user changed in a day against its plan: removed, resized, swapped, added, the day type.
+function changesOf(d) {
+  const c = { removed: 0, amt: 0, swaps: 0, adds: 0, train: (state.train || {})[d] !== undefined };
+  dayAt(d).meals.forEach((meal, m) => {
+    meal.items.forEach((it, i) => {
+      const id = idOf(d, m, i);
+      if (state.removed[id]) c.removed++;
+      else if (state.swaps[id]) c.swaps++;
+      else if (state.amt[id] && state.amt[id] !== it.a) c.amt++;
+    });
+    (state.adds[`d${d}m${m}`] || []).forEach((x, j) => { if (!state.removed[idOf(d, m, 100 + j)]) c.adds++; });
+  });
+  c.any = c.removed + c.amt + c.swaps + c.adds > 0 || c.train;
+  return c;
+}
+// Puts the day back to its plan. What was already eaten stays as it is, food outside the plan too.
+function resetDay(d) {
+  const ate = id => state.eaten[id] > 0;
+  dayAt(d).meals.forEach((meal, m) => {
+    meal.items.forEach((it, i) => {
+      const id = idOf(d, m, i);
+      if (ate(id) && (state.swaps[id] || state.amt[id])) return;
+      delete state.removed[id]; delete state.swaps[id]; delete state.amt[id];
+    });
+    const key = `d${d}m${m}`, list = state.adds[key] || [];
+    if (!list.some((x, j) => ate(idOf(d, m, 100 + j)))) {
+      delete state.adds[key];
+      list.forEach((x, j) => { const id = idOf(d, m, 100 + j); delete state.removed[id]; delete state.amt[id]; delete state.swaps[id]; delete state.eaten[id]; });
+    } else list.forEach((x, j) => { const id = idOf(d, m, 100 + j); if (!ate(id)) state.removed[id] = true; });
+  });
+  // Recounts already made for outside food are forgotten, so deleting that food later does not undo the reset.
+  extrasOf(d).forEach(x => { x.adj = []; });
+  delete state.train[d];
+  delete state.trainAdj[d];
 }
 
 function summary(d) {
-  const { t, plan } = totals(d);
+  const { t, plan, now } = totals(d), ch = changesOf(d), viewer = window.Sync && Sync.viewer;
   const pct = (a, b) => Math.min(100, b ? a / b * 100 : 0);
+  // Over the plan is said in red, under it as what is still to eat.
+  const rest = (a, b, unit, minOver) => (a - b >= minOver ? `<span class="ov">${unit ? `+${whole(a - b)}${unit} сверх плана` : `больше плана на ${whole(a - b)}`}</span>` : `<span>ещё ${whole(Math.max(0, b - a))}${unit}</span>`);
   const macro = (label, a, b, color) => `<div class="macro"><small>${label}</small>
     <b>${whole(a)} <em>из ${whole(b)} г</em></b>
-    <div class="bar"><i style="width:${pct(a, b)}%;background:var(${color})"></i></div></div>`;
+    <div class="bar${a - b >= 3 ? ' over' : ''}"><i style="width:${pct(a, b)}%;background:var(${color})"></i></div>
+    <small class="mrest">${rest(a, b, ' г', 3)}</small></div>`;
+  const parts = [ch.removed && `убрано ${ch.removed}`, ch.amt && `порций изменено ${ch.amt}`, ch.swaps && `замен ${ch.swaps}`, ch.adds && `добавлено ${ch.adds}`, ch.train && 'другой тип дня'].filter(Boolean);
+  const diff = Math.round(now.k - plan.k);
+  const changed = ch.any ? `<div class="dchg"><p><b>День изменён:</b> ${parts.join(', ')}. В дне сейчас ${whole(now.k)} ккал, по плану ${whole(plan.k)}${Math.abs(diff) >= 10 ? ` (${diff > 0 ? '+' : '−'}${Math.abs(diff)})` : ''}.</p>
+    ${viewer ? '' : '<button type="button" class="btn ghost small" data-act="resetday">Вернуть день к плану</button>'}</div>` : '';
   return `<section class="card sum" aria-label="Итог дня">
-    <div class="kcal"><b>${whole(t.k)} ккал</b><span>осталось ${whole(Math.max(0, plan.k - t.k))} из ${whole(plan.k)}</span></div>
-    <div class="bar" style="margin-top:8px"><i style="width:${pct(t.k, plan.k)}%;background:var(--kcal)"></i></div>
+    <div class="kcal"><b>${whole(t.k)} <em>из ${whole(plan.k)} ккал</em></b>${rest(t.k, plan.k, '', 30)}</div>
+    <div class="bar${t.k - plan.k >= 30 ? ' over' : ''}" style="margin-top:8px"><i style="width:${pct(t.k, plan.k)}%;background:var(--kcal)"></i></div>
     <div class="macros">${macro('Белки', t.p, plan.p, '--prot')}${macro('Жиры', t.f, plan.f, '--fat')}${macro('Углеводы', t.c, plan.c, '--carb')}</div>
     ${plan.fb > 0 ? `<div class="fiber">Клетчатка примерно ${whole(t.fb)} из ${whole(plan.fb)} г</div>` : ''}
+    ${changed}
   </section>`;
+}
+// Plan dishes the user took out of the day stay visible, crossed out, with a way back.
+function goneHtml(d, m) {
+  if (window.Sync && Sync.viewer) return '';
+  return dayAt(d).meals[m].items.map((it, i) => ({ it, id: idOf(d, m, i) })).filter(o => state.removed[o.id]).map(o =>
+    `<div class="gone"><span><s>${esc(o.it.n)}</s><small>убрано из дня · ${o.it.a} ${esc(o.it.u)} · ${whole(o.it.k)} ккал</small></span>
+      <button type="button" data-act="restore" data-id="${o.id}">Вернуть</button></div>`).join('');
 }
 
 function itemHtml(d, m, i, it) {
@@ -221,7 +274,7 @@ function itemHtml(d, m, i, it) {
   const cls = got >= it.a ? 'full' : got > 0 ? 'part' : '';
   const status = cls === 'part'
     ? `<small class="st">съел ${got} из ${it.a} ${it.u}, осталось ${it.a - got} ${it.u}</small>`
-    : `<small>${it.a} ${it.u}${it.was ? ` (было ${it.was})` : ''} · ${whole(it.k)} ккал · Б ${num(it.p)} Ж ${num(it.f)} У ${num(it.c)}</small>`;
+    : `<small>${it.a} ${it.u}${it.was ? ` <span class="was">по плану ${it.was}</span>` : ''} · ${whole(it.k)} ккал · Б ${num(it.p)} Ж ${num(it.f)} У ${num(it.c)}</small>`;
   const step = pieces(it.u) ? 0.5 : it.a >= 100 ? 10 : 5;
   const changed = state.swaps[id] || state.amt[id];
   const ready = cookedOf(it, cls === 'part' ? it.a - got : it.a);
@@ -256,13 +309,13 @@ function renderPlan() {
   const d = state.day, day = dayAt(d);
   const viewer = window.Sync && Sync.viewer;
   const meals = day.meals.map((meal, m) => {
-    const list = mealItems(d, m);
-    if (!list.length && (viewer || d < MY)) return '';
+    const list = mealItems(d, m), gone = goneHtml(d, m);
+    if (!list.length && !gone && (viewer || d < MY)) return '';
     const left = list.filter(o => eatenOf(o.id, o.it) < o.it.a).length;
     const kcal = list.reduce((s, o) => s + o.it.k, 0);
     return `<section class="card meal">
       <div class="mealhead"><h2>${esc(meal.name)}</h2><span>${!list.length ? 'пусто' : `${left ? `осталось ${left} · ` : 'всё съедено · '}${whole(kcal)} ккал`}</span></div>
-      ${list.map(o => itemHtml(d, m, o.i, o.it)).join('')}
+      ${list.map(o => itemHtml(d, m, o.i, o.it)).join('')}${gone}
       ${viewer ? '' : `<button type="button" class="mealadd" data-act="addto" data-m="${m}">+ Добавить в «${esc(meal.name)}»</button>`}
     </section>`;
   }).join('');
@@ -439,6 +492,18 @@ function balanceText(x, plan) {
   return `${head}. К плану: Б ${sgn(b.p)}, Ж ${sgn(b.f)}, У ${sgn(b.c)}.`;
 }
 function offerRebalance(x, d, holder) {
+  // The recount aims at the plan's norm, not at the day as it stood: what the user changed before counts too.
+  // A change that brings the day closer to the norm needs nothing. A training switch only evens out the shake.
+  if (x.kind !== 'train') {
+    const { plan, now } = totals(d), ex = extrasOf(d);
+    x.ev = {};
+    for (const m of MACROS) {
+      x.ev[m] = x[m] || 0;
+      const dev = now[m] + ex.reduce((s, e) => s + (e[m] || 0), 0) - plan[m];
+      x[m] = Math.sign(dev) === Math.sign(x.ev[m]) ? +dev.toFixed(1) : 0;
+    }
+    if (Math.abs(x.k) < 40 && Math.abs(x.c) <= 8 && Math.abs(x.f) <= 8 && Math.abs(x.p) <= 8) return false;
+  }
   const ways = rebalanceWays(x, d);
   if (!ways.length && !(x.seed || []).length) return false;
   if (!ways.length) ways.push({ changes: x.seed.map(c => ({ ...c, on: true })), add: null });
@@ -448,7 +513,9 @@ function offerRebalance(x, d, holder) {
 }
 // «Свой вариант»: the user sets every portion still ahead with a slider.
 function sliderItems() {
-  return ahead(sheet.d).filter(o => o.id !== sheet.x.id && !FIXED.test(o.it.n) && !(sheet.x.seed || []).some(c => c.id === o.id));
+  const all = ahead(sheet.d).filter(o => o.id !== sheet.x.id && !FIXED.test(o.it.n) && !(sheet.x.seed || []).some(c => c.id === o.id));
+  const offered = new Set(sheet.ways.flatMap(r => r.changes.filter(c => !c.swap).map(c => c.id)));
+  return sheet.slAll || !offered.size ? all : all.filter(o => offered.has(o.id));
 }
 function customPlan() {
   const changes = (sheet.x.seed || []).map(c => ({ ...c, on: true }));
@@ -668,22 +735,24 @@ function renderSheet() {
   }
   if (sheet.mode === 'rebalance') {
     const x = sheet.x, d = sheet.d, mealName = id => dayAt(d).meals[mealOf(id)].name.toLowerCase();
-    const why = {
-      extra: `Добавлено: ${esc(x.n)}, ${whole(x.k)} ккал.`,
-      swap: `Замена на «${esc(x.n)}»: ${sgn(x.k)} ккал, Б ${sgn(x.p)}, Ж ${sgn(x.f)}, У ${sgn(x.c)}.`,
-      portion: `Порция «${esc(x.n)}»: ${sgn(x.k)} ккал.`,
-      remove: `Убрано: ${esc(x.n)}, ${sgn(x.k)} ккал.`,
+    const e = x.ev || x, why = {
+      extra: `Добавлено: ${esc(x.n)}, ${whole(e.k)} ккал.`,
+      swap: `Замена на «${esc(x.n)}»: ${sgn(e.k)} ккал, Б ${sgn(e.p)}, Ж ${sgn(e.f)}, У ${sgn(e.c)}.`,
+      portion: `Порция «${esc(x.n)}»: ${sgn(e.k)} ккал.`,
+      remove: `Убрано: ${esc(x.n)}, ${sgn(e.k)} ккал.`,
+      restore: `Вернул: ${esc(x.n)}, ${sgn(e.k)} ккал.`,
       train: `День стал ${x.train ? 'тренировочным' : 'без тренировки'}.`,
-    }[x.why] || '';
+    }[x.why] + (x.ev && Math.abs(x.k - e.k) >= 30 ? ` С прежними изменениями день ${x.k > 0 ? 'больше' : 'меньше'} плана на ${whole(Math.abs(x.k))} ккал.` : '') || '';
     if (sheet.custom) {
       const plan = customPlan(), rows = sliderItems().map(o => {
         const it = o.it, unit = unitOf(it.n, it.u, groupOf(it.n)), v = sheet.custom[o.id] ?? it.a;
         return `<div class="slrow"><div class="slhead"><span>${esc(it.n)}<small>${esc(mealName(o.id))}</small></span><b data-sv="${o.id}">${num(v)} ${esc(it.u)}${v !== it.a ? ` <em>было ${num(it.a)}</em>` : ''}</b></div>
           <input type="range" min="0" max="${sliderMax(it)}" step="${unit}" value="${v}" data-act="slider" data-id="${o.id}" aria-label="${esc(it.n)}, ${esc(it.u)}"></div>`;
       }).join('');
-      s.innerHTML = sheetFrame('Свой вариант', `<p class="sub">${why} Двигай порции того, что ещё впереди.</p>
+      s.innerHTML = sheetFrame('Свой вариант', `<p class="sub">${why} ${sheet.slAll ? 'Двигай порции того, что ещё впереди.' : 'Здесь то, что я предлагал поменять. Двигай порции.'}</p>
         ${(x.seed || []).map(c => `<div class="nextrow"><span>${esc(c.n)}</span><b>${num(c.to)} ${esc(c.u)}</b></div>`).join('')}
         ${rows || '<p class="sub">Впереди нечего менять.</p>'}
+        ${sheet.ways.some(r => r.changes.some(c => !c.swap)) ? `<button type="button" class="btn ghost small" data-act="slall">${sheet.slAll ? 'Только предложенное' : 'Показать всё, что впереди'}</button>` : ''}
         <p class="sub rbfoot" id="rbFoot">${balanceText(x, plan)}</p>
         <button type="button" class="btn small" data-act="dorebalance">Применить</button>
         <button type="button" class="btn ghost small" data-act="rbcustom" data-v="0">Назад к вариантам</button>`);
@@ -1060,6 +1129,29 @@ document.addEventListener('click', e => {
     return;
   }
   if (act === 'daykind') { const train = el.dataset.v === '1'; if (isTrain(state.day) !== train) switchDay(state.day, train); return; }
+  if (act === 'slall') {
+    // Sliders that were moved keep their place; the list only grows or shrinks.
+    sheet.slAll = !sheet.slAll;
+    renderSheet();
+    return;
+  }
+  if (act === 'restore') {
+    const d = state.day, it = itemAt(d, mealOf(id), +id.match(/i(\d+)$/)[1]);
+    delete state.removed[id];
+    save();
+    render();
+    if (Math.abs(it.k) < 40 || !offerRebalance({ n: it.n, why: 'restore', kind: 'meal', id, m: mealOf(id), p: it.p, f: it.f, c: it.c, k: it.k }, d, {})) toast('Вернул в день');
+    return;
+  }
+  if (act === 'resetday') {
+    if (!confirm('Вернуть день к плану? Замены, порции, убранное и добавленное в этом дне сбросятся. Съеденное и «Съел вне плана» останутся.')) return;
+    resetDay(state.day);
+    open = null;
+    save();
+    render();
+    toast('День вернулся к плану');
+    return;
+  }
   if (act === 'swapall') { sheet.all = el.dataset.v === '1'; renderSheet(); return; }
   if (act === 'rbnext') { sheet.way = (sheet.way + 1) % sheet.ways.length; renderSheet(); return; }
   if (act === 'rbtoggle') {
