@@ -46,7 +46,7 @@ window.Sync = (() => {
   function body() {
     return {
       plan: PLAN.id, eaten: state.eaten, swaps: state.swaps, extras: state.extras,
-      mydays: state.mydays, adds: state.adds, removed: state.removed, amt: state.amt,
+      mydays: state.mydays, adds: state.adds, removed: state.removed, amt: state.amt, train: state.train, trainAdj: state.trainAdj,
       yield: shared.yield, vessels: shared.vessels, myfoods: shared.myfoods || [], raw: shared.raw || {}, yieldAt: shared.yieldAt || {},
       cookAdd: shared.cookAdd || [], cookHide: shared.cookHide || [],
       days: [...PLAN.days.map((x, d) => d), ...state.mydays.map((x, j) => (x ? MY + j : -1)).filter(d => d >= 0)].map(d => ({ title: dayAt(d).title, text: marked(d) ? dayText(d) : null })),
@@ -65,7 +65,7 @@ window.Sync = (() => {
   const plain = v => v && typeof v === 'object' && !Array.isArray(v);
   function apply(data) {
     if (data.plan !== PLAN.id) return;
-    for (const k of ['eaten', 'swaps', 'extras', 'adds', 'removed', 'amt']) if (plain(data[k])) state[k] = data[k];
+    for (const k of ['eaten', 'swaps', 'extras', 'adds', 'removed', 'amt', 'train', 'trainAdj']) if (plain(data[k])) state[k] = data[k];
     const meals = day => day && typeof day.title === 'string' && typeof day.tab === 'string' && Array.isArray(day.meals) && day.meals.every(m => m && Array.isArray(m.items));
     if (Array.isArray(data.mydays)) state.mydays = data.mydays.map(day => (meals(day) ? day : null));
     if (Array.isArray(data.cookAdd)) shared.cookAdd = data.cookAdd.filter(x => x && x.n).map(x => ({ n: String(x.n), side: !!x.side }));
