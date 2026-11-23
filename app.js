@@ -1253,7 +1253,8 @@ document.addEventListener('click', e => {
   }
   if (act === 'addcustom') {
     const n = $('cName').value.trim(), g = Number($('xAmount').value) || 0, v = readMacros();
-    const per100 = document.querySelector('.cmode .on').dataset.m === '100';
+    // The per-100 toggle lives in the sheet; the day page has its own .cmode chips (training / rest) above it.
+    const per100 = $('sheet').querySelector('[data-act="cmode"][data-m="100"]').classList.contains('on');
     if (!n || !v.k) { toast('Впиши название и калории'); return; }
     if (per100 && g <= 0) { toast('Впиши, сколько граммов съел'); return; }
     const base = g > 0 ? { n, base: per100 ? 100 : g, u: 'г', ...v, start: g } : { n, base: 1, u: 'порция', ...v, start: 1 };
@@ -1446,6 +1447,24 @@ $('tabPlan').addEventListener('click', () => { state.view = 'plan'; save(); rend
 $('tabGrams').addEventListener('click', () => { state.view = 'grams'; save(); render(); window.scrollTo(0, 0); });
 $('tabTrain').addEventListener('click', () => { state.view = 'train'; save(); render(); window.scrollTo(0, 0); });
 $('tabShop').addEventListener('click', () => { state.view = 'shop'; save(); render(); window.scrollTo(0, 0); });
+
+// One-off fix, 23 Nov 2026: these two dishes were entered with БЖУ per 100 g, but a bug saved them per whole portion.
+(function fixPer100() {
+  const FLAG = 'pitanie:fix100-2026-11-23', names = ['Пицца Спар с курицей и грибами', 'Роллы Спар Филадельфия лайт'];
+  try { if (localStorage.getItem(FLAG)) return; } catch (e) { return; }
+  const hit = x => x && x.u === 'г' && names.includes(x.n);
+  let changed = false;
+  (shared.myfoods || []).forEach(p => { if (hit(p) && p.base !== 100) { p.base = 100; changed = true; } });
+  const fix = list => (list || []).forEach((x, i) => {
+    if (!hit(x) || !x.src || x.src.base === 100) return;
+    list[i] = { ...portionOf({ ...x.src, n: x.n, brand: '', base: 100 }, x.a), ...(x.adj ? { adj: x.adj } : {}) };
+    changed = true;
+  });
+  Object.values(state.extras || {}).forEach(fix);
+  Object.values(state.adds || {}).forEach(fix);
+  try { localStorage.setItem(FLAG, '1'); } catch (e) { /* runs again next time, nothing left to fix */ }
+  if (changed) { save(); saveShared(); rebuildProducts(); }
+})();
 
 if (!dayIds().includes(state.day)) {
   const today = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
