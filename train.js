@@ -140,9 +140,8 @@ window.renderTrain = () => {
     ${plan.exercises.map(e => exerciseHtml(e, done)).join('')}
     ${plan.note ? `<p class="sub">${esc(plan.note)}</p>` : ''}
     <section class="card trex">
-      <label class="field col"><span>Заметка</span><input type="text" data-tf="note" value="${esc(ui.note)}" ${done ? 'disabled' : ''} placeholder="Если было не по плану"></label>
       ${done ? '<button type="button" class="btn ghost small" data-tr="undo">Отменить отметку</button>' : `<label class="field"><span>Дата</span><input type="date" id="trDate" value="${todayStr()}"></label>
-      <button type="button" class="btn" data-tr="finish">Тренировка выполнена</button>`}
+      <button type="button" class="btn trdone" data-tr="finish">Тренировка выполнена</button>`}
     </section>`;
 };
 
