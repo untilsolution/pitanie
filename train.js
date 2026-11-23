@@ -21,10 +21,11 @@ function slotList() {
   return out;
 }
 const slotParts = id => { const x = /^M(\d+)-W(\d+)-D(\d+)$/.exec(id); return { m: +x[1], w: +x[2], d: +x[3] }; };
-const slotTitle = id => { const s = slotParts(id); return `Мезоцикл ${s.m} · неделя ${s.w} · день ${s.d}`; };
+// Программа без мезоциклов (СРЦ) называет тренировку только неделей и днём.
+const slotTitle = id => { const s = slotParts(id); return T.mezocycles.length === 1 ? `Неделя ${s.w} · день ${s.d}` : `Мезоцикл ${s.m} · неделя ${s.w} · день ${s.d}`; };
 function slotPlanOf(id) {
   const s = slotParts(id), mz = T.mezocycles.find(x => x.n === s.m), d = mz.days.find(x => x.n === s.d);
-  return { week: mz.weeks[s.w - 1].name, exercises: d.exercises.map(e => ({ name: e.name, lines: e.weeks[s.w - 1] || [] })).filter(e => e.lines.length) };
+  return { week: mz.weeks[s.w - 1].name, note: d.notes?.[s.w - 1] ?? null, exercises: d.exercises.map(e => ({ name: e.name, lines: e.weeks[s.w - 1] || [] })).filter(e => e.lines.length) };
 }
 function nextDay(from) {
   for (let i = 0; i < 14; i++) {
@@ -59,11 +60,12 @@ function scheme(line) {
   return line.scheme ?? '';
 }
 function lineText(line) {
-  const w = line.bodyweight ? 'свой вес' : line.weight != null ? `${num(line.weight)} кг` : '';
+  // Гантели в СРЦ записаны весом одной гантели.
+  const w = line.bodyweight ? 'свой вес' : line.weight != null ? `${line.pair ? 'по ' : ''}${num(line.weight)} кг` : '';
   return `${w}${line.tolerance ? ` (±${num(line.tolerance)})` : ''} ${scheme(line)}`.trim();
 }
 
-const LIFTS = [[/^жим штанги лёжа/i, true], [/^приседания со штангой/i, false], [/^становая тяга/i, false]];
+const LIFTS = [[/^(жим штанги лёжа|жим лежа$)/i, true], [/^(приседания со штангой|присед$)/i, false], [/^становая тяга/i, false]];
 function ladder(t) {
   const out = [20];
   let add = 30;
@@ -113,7 +115,8 @@ function exerciseHtml(e, done) {
   const warn = e.lines.find(l => l.warning), dis = done ? 'disabled' : '';
   const belt = /отягощ/i.test(e.name) && top && bw ? `<small class="trnote">На поясе ${num(Math.max(0, top.weight - bw))} кг при весе ${num(bw)} кг</small>` : '';
   const field = (f, text, unit, step) => `<label class="field"><span>${text}</span><input type="number" inputmode="decimal" step="${step}" min="0" data-tf="${f}" data-ex="${esc(e.name)}" value="${r[f] ?? ''}" ${dis}><span>${unit}</span></label>`;
-  return `<section class="card trex"><h2>${esc(e.name)}</h2>
+  const load = e.lines[0]?.load ? `<small class="trnote">${esc(e.lines[0].load)} нагрузка</small>` : '';
+  return `<section class="card trex"><h2>${esc(e.name)}</h2>${load}
     <div class="trlines">${e.lines.map(l => `<span>${esc(lineText(l))}</span>`).join('')}</div>${belt}
     ${warn ? `<p class="trwarn">${esc(warn.warning)}</p>${done ? '' : `<button type="button" class="btn ghost small" data-tr="fix" data-ex="${esc(e.name)}" data-w="${warn.suggested.weight}">Взять ${num(warn.suggested.weight)} кг</button>`}` : ''}
     ${wu && wu.sets.length ? `<div class="trwarm"><small>Разминка к ${num(wu.target)} кг</small><ol>${wu.sets.map(x => `<li>${esc(x)}</li>`).join('')}</ol></div>` : ''}
@@ -135,6 +138,7 @@ window.renderTrain = () => {
       <button type="button" class="btn ghost small" data-tr="go" data-i="${at + 1}" ${at < items.length - 1 ? '' : 'disabled'}>Следующая</button>
     </div>
     ${plan.exercises.map(e => exerciseHtml(e, done)).join('')}
+    ${plan.note ? `<p class="sub">${esc(plan.note)}</p>` : ''}
     <section class="card trex">
       <label class="field col"><span>Заметка</span><input type="text" data-tf="note" value="${esc(ui.note)}" ${done ? 'disabled' : ''} placeholder="Если было не по плану"></label>
       ${done ? '<button type="button" class="btn ghost small" data-tr="undo">Отменить отметку</button>' : `<label class="field"><span>Дата</span><input type="date" id="trDate" value="${todayStr()}"></label>
@@ -148,7 +152,7 @@ function buildLog(plan) {
     const r = ui.res[e.name] || {}, sets = [];
     for (const line of e.lines) {
       for (let i = 0; i < (line.sets ?? 1); i++) {
-        sets.push({ w: line.weight ?? null, r: line.reps ?? null, planW: line.weight ?? null, planR: line.reps ?? null, amrap: !!line.amrap, rir: line.rir ?? null, done: !!line.reps || line.rir != null });
+        sets.push({ w: line.weight ?? null, r: line.reps ?? null, planW: line.weight ?? null, planR: line.reps ?? null, amrap: !!line.amrap, rir: line.rir ?? null, done: !!line.reps || line.rir != null, ...(line.pair ? { pair: true } : {}) });
       }
     }
     if (r.w) sets[0].w = r.w;
