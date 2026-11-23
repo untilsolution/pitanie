@@ -36,8 +36,9 @@ function save() {
   if (window.Sync) Sync.changed();
 }
 // mydays: days the user made himself. adds, removed, amt: his changes to any day (added products, removed ones, new portions).
+// hidden: plan days the user took off the tabs; their ticks stay and he can bring them back.
 // train: the user's own «тренировка / без тренировки» for a day; trainAdj: what that switch changed, to undo it.
-const state = Object.assign({ eaten: {}, shop: {}, day: 0, view: 'plan', swaps: {}, extras: {}, mydays: [], adds: {}, removed: {}, amt: {}, train: {}, trainAdj: {} }, load());
+const state = Object.assign({ eaten: {}, shop: {}, day: 0, view: 'plan', swaps: {}, extras: {}, mydays: [], adds: {}, removed: {}, amt: {}, train: {}, trainAdj: {}, hidden: {} }, load());
 let open = null;
 
 // Cooked weights and dishes outlive any single plan, so they have their own key.
@@ -74,7 +75,7 @@ function dayAt(d) {
     meals: day.meals.map(meal => { const r = pairs.find(([a]) => a === meal.name); return r && !day.meals.some(x => x.name === r[1]) ? { ...meal, name: r[1] } : meal; }) };
 }
 const isTrain = d => isTrainTitle(dayAt(d).title);
-const dayIds = () => [...PLAN.days.map((x, d) => d).filter(d => d >= SHOW_FROM), ...(state.mydays || []).map((x, j) => (x ? MY + j : -1)).filter(d => d >= 0)];
+const dayIds = () => [...PLAN.days.map((x, d) => d).filter(d => d >= SHOW_FROM && !state.hidden[d]), ...(state.mydays || []).map((x, j) => (x ? MY + j : -1)).filter(d => d >= 0)];
 // Dishes the user cooks now and then stay in the grams list even when the current days lack them.
 const COOK_KEEP = ['Макароны (сухие)', 'Гречка ядрица (сухая)', 'Индейка духовая Индилайт'];
 // The grams list only grows: a dish once seen stays (shared.cookSeen) until the user hides it himself.
@@ -302,7 +303,7 @@ function itemHtml(d, m, i, it) {
       <div class="chips">
         <button type="button" data-act="swap" data-id="${id}">Заменить</button>
         ${changed ? `<button type="button" data-act="unswap" data-id="${id}">Вернуть как было</button>` : ''}
-        <button type="button" data-act="set" data-id="${id}" data-val="0">Не ел</button>
+        ${cls === 'part' ? `<button type="button" data-act="eatenportion" data-id="${id}">Сделать ${got} ${esc(it.u)} порцией</button>` : ''}
         <button type="button" data-act="set" data-id="${id}" data-val="${pieces(it.u) ? it.a / 2 : Math.round(it.a / 2)}">Половина</button>
         <button type="button" data-act="remove" data-id="${id}">Убрать из дня</button>
       </div>
@@ -337,9 +338,18 @@ function renderPlan() {
     <div class="actions">
       ${viewer ? '' : '<button type="button" class="btn" data-act="extra">Съел вне плана</button>'}
       ${!viewer && window.Sync ? weightLink() : ''}
-      ${!viewer && d >= MY ? '<button type="button" class="btn ghost" data-act="delday">Удалить этот день</button>' : ''}
+      ${viewer ? '' : '<button type="button" class="btn ghost" data-act="delday">Удалить этот день</button>'}
+      ${viewer ? '' : hiddenHtml()}
       <button type="button" class="btn ghost" data-act="sync">${esc(window.Sync ? Sync.buttonText() : 'Синхронизация')}</button>
     </div>`;
+}
+
+// Plan days the user removed, each with a way back.
+function hiddenHtml() {
+  const list = PLAN.days.map((x, d) => d).filter(d => d >= SHOW_FROM && state.hidden[d]);
+  if (!list.length) return '';
+  return `<div class="hidden-days"><span>Удалённые дни, нажми, чтобы вернуть:</span><div class="chips">${list.map(d =>
+    `<button type="button" data-act="unhide" data-d="${d}">${esc(PLAN.days[d].tab)}</button>`).join('')}</div></div>`;
 }
 
 // For the person who serves the food: what is left in the next meal, in cooked grams.
@@ -1001,7 +1011,7 @@ function renderGrams() {
 
 function render() {
   $('days').hidden = state.view !== 'plan';
-  if (!dayAt(state.day)) state.day = dayIds()[0];
+  if (!dayIds().includes(state.day)) state.day = dayIds()[0];
   $('days').innerHTML = dayIds().map(d =>
     `<button type="button" class="day" role="tab" data-act="day" data-d="${d}" aria-selected="${d === state.day}">${esc(dayAt(d).tab)}</button>`).join('')
     + (window.Sync && Sync.viewer ? '' : '<button type="button" class="day dayadd" data-act="newday" aria-label="Добавить день">+</button>');
@@ -1120,6 +1130,17 @@ document.addEventListener('click', e => {
   }
   if (act === 'createday') { createDay(); save(); closeSheet(); open = null; render(); window.scrollTo(0, 0); return; }
   if (act === 'delday') {
+    if (dayIds().length < 2) { toast('Это последний день, его нельзя удалить'); return; }
+    if (state.day < MY) {
+      if (!confirm('Убрать этот день из списка? Отметки сохранятся, вернуть его можно внизу любого дня.')) return;
+      state.hidden[state.day] = true;
+      state.day = dayIds()[0];
+      open = null;
+      save();
+      render();
+      window.scrollTo(0, 0);
+      return;
+    }
     if (!confirm('Удалить этот день вместе с отметками?')) return;
     deleteDay(state.day);
     save();
@@ -1150,6 +1171,21 @@ document.addEventListener('click', e => {
     save();
     render();
     if (Math.abs(it.k) < 40 || !offerRebalance({ n: it.n, why: 'restore', kind: 'meal', id, m: mealOf(id), p: it.p, f: it.f, c: it.c, k: it.k }, d, {})) toast('Вернул в день');
+    return;
+  }
+  if (act === 'unhide') {
+    const d = +el.dataset.d;
+    delete state.hidden[d];
+    state.day = d;
+    save();
+    render();
+    window.scrollTo(0, 0);
+    toast('День вернулся');
+    return;
+  }
+  if (act === 'eatenportion') {
+    const id = el.dataset.id, it = findItem(id);
+    setPortion(id, eatenOf(id, it));
     return;
   }
   if (act === 'resetday') {
@@ -1357,6 +1393,22 @@ function saveRaw(t) {
   }
   render();
 }
+// The user's own portion for a product; the rest of the day is rebalanced if the change is big enough.
+function setPortion(id, value) {
+  const it = findItem(id), a = Math.round((Number(value) || 0) * 10) / 10;
+  if (a <= 0) { toast('Чтобы убрать продукт, нажми «Убрать из дня»'); render(); return; }
+  if (a === (it.was || it.a) && !state.amt[id]) return;
+  const before = findItem(id);
+  state.amt[id] = a;
+  if (state.eaten[id] > a) state.eaten[id] = a;
+  save();
+  render();
+  // A smaller portion is made up elsewhere, a bigger one paid for, if the user wants.
+  const diff = diffOf(findItem(id), before);
+  if (Math.abs(diff.k) >= 40) offerRebalance({ n: it.n, why: 'portion', kind: groupOf(it.n) === 'sweet' ? 'sweet' : 'meal', id, m: mealOf(id), ...diff }, state.day, {});
+  else toast(`Порция теперь ${a} ${it.u}`);
+}
+
 document.addEventListener('change', e => {
   const t = e.target, act = t.dataset.act;
   if (window.Sync && Sync.viewer && ['input', 'amt', 'vphoto', 'cookedinput', 'yield', 'rawsave'].includes(act)) {
@@ -1365,19 +1417,7 @@ document.addEventListener('change', e => {
     return;
   }
   if (act === 'input') { setEaten(t.dataset.id, t.value); render(); }
-  if (act === 'amt') {
-    const id = t.dataset.id, it = findItem(id), a = Math.round((Number(t.value) || 0) * 10) / 10;
-    if (a <= 0) { toast('Чтобы убрать продукт, нажми «Убрать из дня»'); render(); return; }
-    if (a === (it.was || it.a) && !state.amt[id]) return;
-    const before = findItem(id);
-    state.amt[id] = a;
-    if (state.eaten[id] > a) state.eaten[id] = a;
-    save();
-    render();
-    // A smaller portion is made up elsewhere, a bigger one paid for, if the user wants.
-    const diff = diffOf(findItem(id), before);
-    if (Math.abs(diff.k) >= 40) offerRebalance({ n: it.n, why: 'portion', kind: groupOf(it.n) === 'sweet' ? 'sweet' : 'meal', id, m: mealOf(id), ...diff }, state.day, {});
-  }
+  if (act === 'amt') setPortion(t.dataset.id, Number(t.value));
   if (act === 'vphoto' && t.files[0]) {
     photoCopies(t.files[0]).then(copies => {
       Object.assign(shared.vessels[+t.dataset.i], copies);
