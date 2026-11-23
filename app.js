@@ -380,7 +380,23 @@ function extrasHtml(d) {
 
 // Bottom sheet shared by "replace a product" and "ate outside the plan".
 let sheet = null;
-function closeSheet() { sheet = null; $('sheet').hidden = true; $('sheet').innerHTML = ''; document.body.classList.remove('locked'); }
+// iPhone: while a sheet is open the page under it must not scroll, or the caret in its fields is drawn off the field.
+// So the body is pinned in place (position: fixed at the current scroll) and put back on close.
+function lockPage() {
+  if (document.body.classList.contains('locked')) return;
+  const y = window.scrollY;
+  document.body.dataset.y = y;
+  document.body.style.top = `-${y}px`;
+  document.body.classList.add('locked');
+}
+function unlockPage() {
+  if (!document.body.classList.contains('locked')) return;
+  const y = +document.body.dataset.y || 0;
+  document.body.classList.remove('locked');
+  document.body.style.top = '';
+  window.scrollTo(0, y);
+}
+function closeSheet() { sheet = null; $('sheet').hidden = true; $('sheet').innerHTML = ''; unlockPage(); }
 function swapOptions() {
   const it = findItem(sheet.id), q = norm(sheet.q), cat = (productOf(it.n) || {}).cat, g = groupOf(it.n, cat);
   // «Похожие»: the same group, or the same table category for products outside the groups. «Все»: anything, by calories.
@@ -693,47 +709,104 @@ function sheetList() {
     `<button type="button" class="pick" data-act="pickextra" data-i="${o.i}"><b>${esc(label(o.p))}${o.p.mine ? ' <em>моё</em>' : o.p.ref ? ' <em>примерно</em>' : ''}</b>
       <small>на ${o.p.base} ${o.p.u}: ${whole(o.p.k)} ккал · Б ${num(o.p.p)} Ж ${num(o.p.f)} У ${num(o.p.c)}</small></button>`).join('') || '<p class="sub">В таблице нет. Нажми «Найти в интернете».</p>';
 }
+// Internet search has two parts.
+// 1. offru.json: products sold in Russia from Open Food Facts, downloaded by tools/make_offru.py. Searched on the phone, instant, works offline.
+// 2. The live Open Food Facts search for anything newer. It is often overloaded and then fails at once, so it is retried for up to 20 seconds.
+let offBase = null;
+function loadOff() {
+  if (!offBase) offBase = fetch('offru.json').then(r => (r.ok ? r.json() : Promise.reject(new Error('no base')))).then(j => ({
+    date: j.date,
+    items: j.items.map(([n, brand, p, f, c, k, qty]) => ({ n, brand, p, f, c, k, qty, key: ` ${keyText(n + ' ' + brand)}` })),
+  })).catch(e => { offBase = null; throw e; });
+  return offBase;
+}
+// Lower case, ё as е, Latin brand names in Cyrillic too (Spar and Спар both match), punctuation as spaces.
+const LAT = { a: 'а', b: 'б', c: 'к', d: 'д', e: 'е', f: 'ф', g: 'г', h: 'х', i: 'и', j: 'дж', k: 'к', l: 'л', m: 'м', n: 'н', o: 'о', p: 'п', q: 'к', r: 'р', s: 'с', t: 'т', u: 'у', v: 'в', w: 'в', x: 'кс', y: 'й', z: 'з' };
+const keyText = t => {
+  const s = norm(t).replace(/[«»"'.,()\/\+\-–—:;!?%№]/g, ' ').replace(/\s+/g, ' ').trim();
+  return /[a-z]/.test(s) ? `${s} ${s.replace(/[a-z]/g, ch => LAT[ch])}` : s;
+};
+// Every word of the query has to be in the name or brand; words found at a word start count more, shorter names go first.
+function matchOff(items, q) {
+  const words = keyText(q).split(' ').filter(w => w.length > 1).map(w => w.replace(/[a-z]/g, ch => LAT[ch]));
+  if (!words.length) return [];
+  const stem = w => (w.length > 4 ? w.slice(0, w.length - 1) : w); // «пиццы», «пицца», «роллы», «ролл»
+  const hits = [];
+  for (const it of items) {
+    let score = 0, ok = true;
+    for (const w of words) {
+      const s = stem(w);
+      if ((it.key + ' ').includes(` ${w} `)) score += 3;
+      else if (it.key.includes(' ' + s)) score += 2;
+      else if (it.key.includes(s)) score += 1;
+      else { ok = false; break; }
+    }
+    if (ok) hits.push({ it, score: score * 100 - Math.min(it.key.length, 99) });
+  }
+  return hits.sort((a, b) => b.score - a.score).slice(0, 40).map(h => h.it);
+}
+const webPick = (p, i) => `<button type="button" class="pick" data-act="pickweb" data-i="${i}"><b>${esc(label(p))}</b>
+      <small>на 100 г: ${whole(p.k)} ккал · Б ${num(p.p)} Ж ${num(p.f)} У ${num(p.c)}${p.qty ? ` · упаковка ${esc(p.qty)}` : ''}</small></button>`;
 function webList() {
-  if (sheet.webState === 'load') return '<p class="sub">Ищу, это может занять до 15 секунд…</p>';
-  if (sheet.webState === 'error') return '<p class="sub">Интернет-база не ответила. Попробуй ещё раз или впиши блюдо вручную.</p>';
-  if (sheet.webState === 'empty') return '<p class="sub">В интернете не нашлось. Впиши блюдо вручную.</p>';
-  if (!sheet.web || !sheet.web.length) return '';
-  return `<p class="sub webhead">Из интернета, база Open Food Facts. Значения от пользователей, примерные.</p>` + sheet.web.map((p, i) =>
-    `<button type="button" class="pick" data-act="pickweb" data-i="${i}"><b>${esc(label(p))}</b>
-      <small>на 100 г: ${whole(p.k)} ккал · Б ${num(p.p)} Ж ${num(p.f)} У ${num(p.c)}</small></button>`).join('');
+  const w = sheet.web || [], local = w.filter(p => p.from === 'base').length;
+  const live = {
+    load: '<p class="sub">Ищу ещё в интернете, до 20 секунд…</p>',
+    error: w.length ? '<p class="sub">Живой поиск сейчас не ответил, показаны продукты из скачанной базы.</p>' : '<p class="sub">Не нашлось ни в скачанной базе, ни в интернете: живой поиск сейчас не отвечает. Попробуй другое название или впиши блюдо вручную.</p>',
+    empty: w.length ? '' : '<p class="sub">Не нашлось. Попробуй короче, например одно слово и марку, или впиши блюдо вручную.</p>',
+  }[sheet.webState] || '';
+  if (!w.length) return live;
+  const parts = [local && `в скачанной базе ${local}${sheet.webDate ? ` (от ${new Date(sheet.webDate).toLocaleDateString('ru-RU')})` : ''}`, w.length > local && `в живом поиске ${w.length - local}`].filter(Boolean);
+  return `<p class="sub webhead">Open Food Facts, нашлось ${parts.join(', ')}. Значения от покупателей, сверяй с упаковкой.</p>`
+    + w.map(webPick).join('') + live;
 }
 async function webSearch() {
   const q = sheet.q.trim();
   if (q.length < 2) { toast('Сначала впиши название в поиск'); return; }
-  sheet.webState = 'load';
-  $('webBox').innerHTML = webList();
-  const stop = new AbortController(), timer = setTimeout(() => stop.abort(), 15000);
-  try {
-    // Two sections of Open Food Facts are asked at once: the Russian one and the whole base. Either may fail on its own.
-    const ask = host => fetch(`https://${host}.openfoodfacts.org/cgi/search.pl?search_simple=1&action=process&json=1&page_size=30&fields=product_name,product_name_ru,brands,nutriments&search_terms=${encodeURIComponent(q)}`, { signal: stop.signal }).then(r => r.json());
-    const answers = await Promise.allSettled([ask('ru'), ask('world')]);
-    if (answers.every(a => a.status === 'rejected')) throw new Error('no answer');
-    const seen = new Set(), words = norm(q).split(/\s+/);
-    const found = answers.flatMap(a => (a.status === 'fulfilled' ? a.value.products || [] : [])).map(x => {
-      const t = x.nutriments || {}, p = t.proteins_100g || 0, f = t.fat_100g || 0, c = t.carbohydrates_100g || 0;
-      // Many entries have macros but no calories: then they are counted from the macros.
-      const k = t['energy-kcal_100g'] ?? (t['energy_100g'] ? t['energy_100g'] / 4.184 : p * 4 + f * 9 + c * 4);
-      return { n: (x.product_name_ru || x.product_name || '').trim(), brand: (x.brands || '').split(',')[0].trim(), freq: '', base: 100, u: 'г', k: Math.round(k), p, f, c };
-    }).filter(p => {
-      const key = `${label(p)}|${Math.round(p.k)}`.toLowerCase();
+  const run = sheet.webRun = (sheet.webRun || 0) + 1, mine = () => sheet && sheet.webRun === run;
+  const seen = new Set(), add = list => {
+    const fresh = list.filter(p => {
+      const key = `${keyText(label(p))}|${Math.round(p.k)}`;
       if (!p.n || !p.k || seen.has(key)) return false;
       seen.add(key);
       return true;
-    }).sort((a, b) => words.filter(w => norm(label(b)).includes(w)).length - words.filter(w => norm(label(a)).includes(w)).length).slice(0, 20);
-    if (!sheet) return;
-    sheet.web = found;
-    sheet.webState = found.length ? '' : 'empty';
-  } catch (e) {
-    if (!sheet) return;
-    sheet.webState = 'error';
+    });
+    sheet.web = [...(sheet.web || []), ...fresh];
+  };
+  const show = () => { if (mine() && $('webBox')) $('webBox').innerHTML = webList(); };
+  sheet.web = [];
+  sheet.webState = 'load';
+  show();
+  // The downloaded base answers at once.
+  try {
+    const base = await loadOff();
+    if (!mine()) return;
+    sheet.webDate = base.date;
+    add(matchOff(base.items, q).map(p => ({ n: p.n, brand: p.brand, freq: '', base: 100, u: 'г', p: p.p, f: p.f, c: p.c, k: p.k, qty: p.qty, from: 'base' })));
+    show();
+  } catch (e) { /* no base on this phone yet: the live search still runs */ }
+  // The live search: both sections, a few tries while the server is busy.
+  const ask = host => fetch(`https://${host}.openfoodfacts.org/cgi/search.pl?search_simple=1&action=process&json=1&page_size=30&fields=product_name,product_name_ru,brands,nutriments,quantity&search_terms=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined })
+    .then(r => (r.ok ? r.json() : Promise.reject(new Error(r.status))));
+  const until = Date.now() + 20000;
+  let answers = [];
+  for (let n = 0; Date.now() < until && mine(); n++) {
+    answers = await Promise.allSettled([ask('ru'), ask('world')]);
+    if (answers.some(a => a.status === 'fulfilled')) break;
+    await new Promise(r => setTimeout(r, 1500 + n * 1500));
   }
-  clearTimeout(timer);
-  if ($('webBox')) $('webBox').innerHTML = webList();
+  if (!mine()) return;
+  const got = answers.filter(a => a.status === 'fulfilled');
+  if (got.length) {
+    const words = keyText(q).split(' ');
+    add(got.flatMap(a => a.value.products || []).map(x => {
+      const t = x.nutriments || {}, p = t.proteins_100g || 0, f = t.fat_100g || 0, c = t.carbohydrates_100g || 0;
+      // Many entries have macros but no calories: then they are counted from the macros.
+      const k = t['energy-kcal_100g'] ?? (t['energy_100g'] ? t['energy_100g'] / 4.184 : p * 4 + f * 9 + c * 4);
+      return { n: (x.product_name_ru || x.product_name || '').trim(), brand: (x.brands || '').split(',')[0].trim(), freq: '', base: 100, u: 'г', k: Math.round(k), p, f, c, qty: (x.quantity || '').slice(0, 20), from: 'live' };
+    }).sort((a, b) => words.filter(w => keyText(label(b)).includes(w)).length - words.filter(w => keyText(label(a)).includes(w)).length).slice(0, 20));
+  }
+  sheet.webState = got.length ? (sheet.web.length ? '' : 'empty') : 'error';
+  show();
 }
 function pickInfo() {
   const p = sheet.pick, a = Number($('xAmount').value) || 0, x = portionOf(p, a);
@@ -742,7 +815,7 @@ function pickInfo() {
 function renderSheet() {
   const s = $('sheet');
   s.hidden = false;
-  document.body.classList.add('locked');
+  lockPage();
   let title, body;
   if (sheet.mode === 'sync') {
     const on = Sync.mode === 'writer' || Sync.mode === 'shopper';
@@ -898,7 +971,7 @@ function openPhoto(v) {
   box.setAttribute('aria-label', `Фото: ${v.n}`);
   box.innerHTML = `<img src="${v.big || v.photo}" alt="${esc(v.n)}"><p>${esc(v.n)}, ${v.w} г</p><button type="button" data-act="closephoto">Закрыть</button>`;
   document.body.appendChild(box);
-  document.body.classList.add('locked');
+  lockPage();
 }
 
 function shoppingList() {
@@ -1072,7 +1145,7 @@ document.addEventListener('click', e => {
   if (!el || ['input', 'amt', 'slider', 'cookedinput', 'yield', 'rawsave', 'calcinput', 'sheetsearch', 'xamount', 'vphoto'].includes(el.dataset.act)) return;
   const { act, id } = el.dataset;
   if (act === 'viewphoto') { openPhoto(shared.vessels[+el.dataset.i]); return; }
-  if (act === 'closephoto') { document.querySelectorAll('.photoview').forEach(b => b.remove()); document.body.classList.remove('locked'); return; }
+  if (act === 'closephoto') { document.querySelectorAll('.photoview').forEach(b => b.remove()); if (!sheet) unlockPage(); return; }
   if (window.Sync && Sync.viewer && !VIEWER_OK.has(act) && !(act === 'shop' && Sync.canShop)) {
     toast(act === 'shop' ? 'Чтобы отмечать покупки, нужен ключ: Рацион, кнопка внизу' : 'Отмечать можно только на основном телефоне');
     return;
