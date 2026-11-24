@@ -53,7 +53,7 @@ function saveShared() {
   try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
   if (window.Sync) Sync.changed();
 }
-const COOK = /^(Пюре|Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты|Лазанья|Картофель жареный)/;
+const COOK = /^(Пюре|Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты|Лазанья|Картофель жареный|Голень)/;
 // One-off food from outside is not cooked at home, so it never gets a weights card by itself.
 const NOT_COOKED = /«Вкусно и точка»|вялен|сушён|слабосол|копчён/i;
 const DRY = /^(Макароны|Рис|Гречка|Крупа|Овсян)/;
@@ -1520,6 +1520,18 @@ $('tabPlan').addEventListener('click', () => { state.view = 'plan'; save(); rend
 $('tabGrams').addEventListener('click', () => { state.view = 'grams'; save(); render(); window.scrollTo(0, 0); });
 $('tabTrain').addEventListener('click', () => { state.view = 'train'; save(); render(); window.scrollTo(0, 0); });
 $('tabShop').addEventListener('click', () => { state.view = 'shop'; save(); render(); window.scrollTo(0, 0); });
+
+// Cooked weight the user named for a new dish (g of cooked from 100 g raw), set once; after that the weights tab is his.
+(function seedYield() {
+  const SEED = { 'Голень куриная без кожи и кости': 65 }, KEY = 'pitanie:yseed';
+  let done = [];
+  try { done = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return; }
+  const todo = Object.keys(SEED).filter(n => !done.includes(n));
+  if (!todo.length) return;
+  todo.forEach(n => { if (!shared.yield[n]) { shared.yield[n] = SEED[n]; (shared.yieldAt = shared.yieldAt || {})[n] = new Date().toISOString(); } });
+  try { localStorage.setItem(KEY, JSON.stringify(done.concat(todo))); } catch (e) { /* set again next time */ }
+  saveShared();
+})();
 
 // One-off fix, 23 Nov 2026: these two dishes were entered with БЖУ per 100 g, but a bug saved them per whole portion.
 (function fixPer100() {
