@@ -18,19 +18,20 @@ from datetime import date
 sys.stdout.reconfigure(encoding='utf-8')
 URL = 'https://search.openfoodfacts.org/search'
 FIELDS = 'code,product_name,product_name_ru,brands,nutriments,quantity'
-PAGE = 100  # bigger pages stall on the server side
+PAGE = 25  # answers over about 20 KB stall on the server side, 25 products stay well under that
+FAILED = []
 WINDOW = 10000  # the search engine pages through at most this many hits per query
 
 
 def ask(q, page, size=PAGE, fields=FIELDS):
     url = URL + '?' + urllib.parse.urlencode({'q': q, 'page': page, 'page_size': size, 'fields': fields})
-    for attempt in range(8):
+    for attempt in range(12):
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'pitanie-app/1.0'}), timeout=30) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'pitanie-app/1.0'}), timeout=8) as r:
                 return json.load(r)
         except Exception as e:  # network hiccup or overload: wait and try again
             print('  retry', page, e)
-            time.sleep(2 + attempt * 3)
+            time.sleep(1 + attempt)
     raise RuntimeError('no answer for ' + q)
 
 
@@ -38,8 +39,9 @@ def page_hits(job):
     q, page = job
     try:
         return ask(q, page).get('hits', [])
-    except RuntimeError:  # one stuck page is skipped, the rest of the base still gets saved
+    except RuntimeError:  # one stuck page is set aside and asked again at the end
         print('  skipped', q, page)
+        FAILED.append(job)
         return []
 
 
@@ -96,6 +98,16 @@ def main():
                     out.append(r)
             if i % 20 == 0 or i == len(jobs):
                 print(f'{i}/{len(jobs)} pages -> {len(out)} products')
+    # Second chance for the pages the server did not give, one at a time.
+    for job in list(FAILED):
+        FAILED.remove(job)
+        for x in page_hits(job):
+            r = row(x)
+            key = (r[0].lower(), r[1].lower(), r[5]) if r else None
+            if r and key not in seen:
+                seen.add(key)
+                out.append(r)
+    print('second pass done,', len(FAILED), 'pages still missing ->', len(out))
     out.sort(key=lambda r: (r[0].lower(), r[1].lower()))
     with open('offru.json', 'w', encoding='utf-8') as fh:
         json.dump({'date': date.today().isoformat(), 'source': 'Open Food Facts, ODbL', 'cols': ['n', 'brand', 'p', 'f', 'c', 'k', 'qty'], 'items': out},
