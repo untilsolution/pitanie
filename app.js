@@ -47,13 +47,13 @@ let sharedMemory = {};
 function loadShared() {
   try { return JSON.parse(localStorage.getItem(SHARED)) || {}; } catch (e) { return sharedMemory; }
 }
-const shared = Object.assign({ yield: {}, yieldAt: {}, vessels: [], myfoods: [], raw: {}, cookAdd: [], cookHide: [], cookSeen: [] }, loadShared());
+const shared = Object.assign({ yield: {}, yieldAt: {}, vessels: [], myfoods: [], raw: {}, cookAdd: [], cookHide: [], cookSeen: [], prodEdit: {} }, loadShared());
 function saveShared() {
   sharedMemory = shared;
   try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
   if (window.Sync) Sync.changed();
 }
-const COOK = /^(Пюре|Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты|Лазанья|Картофель жареный|Голень)/;
+const COOK = /^(Пюре|Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлет|Лазанья|Картофель жареный|Голень)/;
 // One-off food from outside is not cooked at home, so it never gets a weights card by itself.
 const NOT_COOKED = /«Вкусно и точка»|вялен|сушён|слабосол|копчён/i;
 const DRY = /^(Макароны|Рис|Гречка|Крупа|Овсян)/;
@@ -77,7 +77,37 @@ function dayAt(d) {
 const isTrain = d => isTrainTitle(dayAt(d).title);
 const dayIds = () => [...PLAN.days.map((x, d) => d).filter(d => d >= SHOW_FROM && !state.hidden[d]), ...(state.mydays || []).map((x, j) => (x ? MY + j : -1)).filter(d => d >= 0)];
 // Dishes the user cooks now and then stay in the grams list even when the current days lack them.
-const COOK_KEEP = ['Макароны (сухие)', 'Гречка ядрица (сухая)', 'Индейка духовая Индилайт'];
+const COOK_KEEP = ['Макароны', 'Гречка', 'Индейка духовая Индилайт'];
+// Old long names of the same products (user, 2026-11-27: just «Рис», «Гречка», «Макароны»). Everything saved under an old name moves to the new one.
+const RENAMED = {
+  'Рис (сухой)': 'Рис', 'Рис шлифованный круглозёрный (сухой)': 'Рис', 'Рис шлифованный круглозерный (сухой)': 'Рис',
+  'Макароны (сухие)': 'Макароны', 'Макароны / спагетти из твёрдых сортов (сухие)': 'Макароны',
+  'Гречка ядрица (сухая)': 'Гречка', 'Хлопья овсяные быстрые (сухие)': 'Хлопья овсяные', 'Фарш говяжий постный': 'Фарш говяжий',
+};
+const newName = n => {
+  if (typeof n !== 'string') return n;
+  for (const [a, b] of Object.entries(RENAMED)) if (n === a || n.startsWith(a + ', ')) return b + n.slice(a.length);
+  return n;
+};
+function fixNames() {
+  let changed = false;
+  const keys = box => { if (!box) return; for (const k of Object.keys(box)) { const n = newName(k); if (n !== k) { if (box[n] === undefined || (shared.yieldAt || {})[k] > (shared.yieldAt || {})[n]) box[n] = box[k]; delete box[k]; changed = true; } } };
+  const list = arr => (Array.isArray(arr) ? [...new Set(arr.map(n => { const m = newName(n); if (m !== n) changed = true; return m; }))] : arr);
+  const item = x => { if (x && typeof x.n === 'string') { const m = newName(x.n); if (m !== x.n) { x.n = m; changed = true; } } };
+  // The newest weighing wins when the old and the new name both have one.
+  const at = { ...(shared.yieldAt || {}) };
+  for (const k of Object.keys(shared.yield || {})) { const n = newName(k); if (n !== k) { if (shared.yield[n] === undefined || (at[k] || '') > (at[n] || '')) { shared.yield[n] = shared.yield[k]; if (at[k]) shared.yieldAt[n] = at[k]; } delete shared.yield[k]; if (shared.yieldAt) delete shared.yieldAt[k]; changed = true; } }
+  keys(shared.raw);
+  shared.cookHide = list(shared.cookHide);
+  shared.cookSeen = list(shared.cookSeen);
+  (shared.cookAdd || []).forEach(item);
+  if (shared.cookAdd) shared.cookAdd = shared.cookAdd.filter((x, i, a) => a.findIndex(y => y.n === x.n) === i);
+  Object.values(state.swaps || {}).forEach(item);
+  Object.values(state.adds || {}).forEach(l => (l || []).forEach(item));
+  Object.values(state.extras || {}).forEach(l => (l || []).forEach(item));
+  (state.mydays || []).forEach(day => day && day.meals.forEach(meal => meal.items.forEach(item)));
+  return changed;
+}
 // The grams list only grows: a dish once seen stays (shared.cookSeen) until the user hides it himself.
 const cookables = () => {
   const hide = shared.cookHide || [], own = (shared.cookAdd || []).map(x => x.n);
@@ -126,7 +156,10 @@ const READY_FOOD = [
 const PRODUCTS = [];
 function rebuildProducts() {
   const mine = (shared.myfoods || []).map(p => ({ ...p, cat: 'Мои блюда', brand: '', freq: '', mine: true }));
-  const table = [...(window.PRODUCTS || []), ...READY_FOOD, ...mine], have = new Set(table.map(p => norm(p.n)));
+  // The user's own names for table products and the ones he hid, made on the phone.
+  const edit = shared.prodEdit || {};
+  const own = [...(window.PRODUCTS || []), ...READY_FOOD].filter(p => !(edit[p.n] || {}).hidden).map(p => (edit[p.n] && edit[p.n].n ? { ...p, orig: p.n, n: edit[p.n].n } : p));
+  const table = [...own, ...mine], have = new Set([...table.map(p => norm(p.n)), ...table.filter(p => p.orig).map(p => norm(p.orig))]);
   // The reference list only fills gaps: the user's own numbers always win.
   const ref = (window.FOODS || []).filter(f => !have.has(norm(f[0]))).map(([n, p, f, c, k, start]) => ({ cat: 'Справочник', n, brand: '', freq: '', base: 100, u: 'г', p, f, c, k, start, ref: true }));
   PRODUCTS.length = 0;
@@ -158,8 +191,8 @@ const G_SIDE = /^(Макароны|Рис[ ,(]|Рис$|Гречка|Пюре|К�
 const G_CEREAL = /^(Подушечки|Хлопья|Шарики|Мюсли|Овсяные)/;
 const G_MILK = /^(Молоко|Кефир|Ряженка)/;
 const G_COLD = /^(Ветчина|Колбаски|Молочная колбаса|Филе грудки копчёное)/;
-const G_MEAT = /^(Куриная|Бёдра|Филе|Фарш|Рулетики|Говядина|Индейка|Наггетсы в|Курица|Свинина|Котлеты|Рыба красная|Креветки|Тунец)/;
-const G_PROTEIN = /^(Творожная запеканка|Творог|Сырники|Протеин|Сыр «Большой куш»|Сыр 20%|Йогурт 2%|Йогурт Teos|Белок яичный)/;
+const G_MEAT = /^(Куриная|Бёдра|Голень|Филе|Фарш|Рулетики|Говядина|Индейка|Наггетсы в|Курица|Свинина|Котлет|Рыба красная|Сельдь|Креветки|Тунец)/;
+const G_PROTEIN = /^(Творожная запеканка|Творог|Сырники|Протеин|Сыр «Большой куш»|Сыр 20%|Йогурт 2%|Йогурт Teos|Белок яичный|Яйцо)/;
 function groupOf(n, cat) {
   // Ready dishes (burgers, roti, lasagna, fast food) swap among themselves by calories.
   if (cat === 'Готовая еда') return 'ready';
@@ -170,6 +203,10 @@ function groupOf(n, cat) {
   if (G_SIDE.test(n)) return 'side';
   if (G_MEAT.test(n)) return 'meat';
   if (G_PROTEIN.test(n)) return 'protein';
+  // Anything new in these table categories joins its group even if no name rule above knows it.
+  if (cat === 'Мясо и птица' || cat === 'Рыба') return 'meat';
+  if (cat === 'Колбасные изделия') return 'cold';
+  if (cat === 'Соусы' && !/^Масло/.test(n)) return 'sauce';
   if (SWAPPABLE.test(n) || SWEETS.test(n) || (SWAP_CATS.includes(cat) && !/^(Огурец|Сгущёнка)/.test(n))) return 'sweet';
   return null;
 }
@@ -179,8 +216,9 @@ function productOf(n) {
   let best = null;
   for (const p of PRODUCTS) {
     if (p.ref) continue;
-    const a = norm(p.n);
-    if ((k.startsWith(a) || norm(label(p)).startsWith(k)) && (!best || a.length > norm(best.n).length)) best = p;
+    for (const a of [norm(p.n), p.orig && norm(p.orig)].filter(Boolean)) {
+      if ((k.startsWith(a) || norm(label(p)).startsWith(k)) && (!best || a.length > norm(best.n).length)) best = p;
+    }
   }
   return best;
 }
@@ -638,7 +676,7 @@ function buildDay(train, side, meat, dt) {
   let meatA = 200;
   const main = extra => [portionOf(side, sideA), portionOf(meat, meatA), sauce, item(/^Псиллиум/, 5), item(/^Отруби/, 5), ...extra].filter(Boolean);
   const build = () => [
-    { name: 'Завтрак', items: [item(cereal[0], cereal[1]), item(/^Молоко 2,5/, cereal[2]), item(/^Кофе с молоком/, 400), dt.getDate() % 2 ? item(/^Сахар/, 15) : item(/^Сироп/, 20)].filter(Boolean) },
+    { name: 'Завтрак', items: [item(cereal[0], cereal[1]), item(/^Молоко 2,5/, cereal[2]), item(/^Кофе с молоком/, 400), item(/^Сахар/, 15)].filter(Boolean) },
     { name: 'Второй завтрак', items: [item(/^Творожная запеканка/, 1), item(/^Сгущёнка цельная/, 20), item(fruit, 150)].filter(Boolean) },
     { name: 'Обед', items: main(train ? [] : [item(/^Мармелад/, 20)]) },
     train
@@ -705,9 +743,12 @@ function sheetList() {
       <small>${num(o.a)} ${esc(o.p.u)} · ${whole(o.x.k)} ккал${diff(o.x.k)} · Б ${num(o.x.p)} Ж ${num(o.x.f)} У ${num(o.x.c)}</small></button>`).join('') || `<p class="sub">Ничего не нашлось${sheet.all ? '' : '. Нажми «Все продукты».'}</p>`;
   }
   const q = norm(sheet.q);
-  return PRODUCTS.map((p, i) => ({ p, i })).filter(o => norm(label(o.p)).includes(q)).map(o =>
+  const hidden = Object.entries(shared.prodEdit || {}).filter(([, e]) => e.hidden).map(([n]) => n);
+  const back = hidden.length ? `<div class="hidden-days"><span>Скрытые продукты, нажми, чтобы вернуть:</span><div class="chips">${hidden.map(n =>
+    `<button type="button" data-act="unhideprod" data-n="${esc(n)}">${esc(n)}</button>`).join('')}</div></div>` : '';
+  return PRODUCTS.map((p, i) => ({ p, i })).filter(o => norm(label(o.p)).includes(q) || (o.p.orig && norm(o.p.orig).includes(q))).map(o =>
     `<button type="button" class="pick" data-act="pickextra" data-i="${o.i}"><b>${esc(label(o.p))}${o.p.mine ? ' <em>моё</em>' : o.p.ref ? ' <em>примерно</em>' : ''}</b>
-      <small>на ${o.p.base} ${o.p.u}: ${whole(o.p.k)} ккал · Б ${num(o.p.p)} Ж ${num(o.p.f)} У ${num(o.p.c)}</small></button>`).join('') || '<p class="sub">В таблице нет. Нажми «Найти в интернете».</p>';
+      <small>на ${o.p.base} ${o.p.u}: ${whole(o.p.k)} ккал · Б ${num(o.p.p)} Ж ${num(o.p.f)} У ${num(o.p.c)}</small></button>`).join('') + (q ? '' : back) || '<p class="sub">В таблице нет. Нажми «Найти в интернете».</p>';
 }
 // Internet search has two parts.
 // 1. offru.json: products sold in Russia from Open Food Facts, downloaded by tools/make_offru.py. Searched on the phone, instant, works offline.
@@ -896,6 +937,19 @@ function renderSheet() {
     title = sheet.target === undefined ? 'Съел вне плана' : `Добавить в «${dayAt(state.day).meals[sheet.target].name}»`;
     body = '';
   }
+  if (sheet.pick && sheet.editing) {
+    // The user's own product list on the phone: rename or hide a table product, fully edit his own dish.
+    const p = sheet.pick;
+    body = `<h3>Изменить: ${esc(label(p))}</h3>
+      <label class="field col"><span>Название</span><input type="text" id="eName" value="${esc(p.n)}" data-act="calcinput" aria-label="Название"></label>
+      ${p.mine ? `<p class="sub">БЖУ на ${num(p.base)} ${esc(p.u)}</p>${macroInputs(p)}` : `<p class="sub">БЖУ этого продукта из таблицы, их меняю я по твоей просьбе. Здесь можно поменять название или скрыть продукт из списка.</p>`}
+      <button type="button" class="btn small" data-act="saveprod">Сохранить</button>
+      ${p.orig ? '<button type="button" class="btn ghost small" data-act="origprod">Вернуть название из таблицы</button>' : ''}
+      ${p.mine ? '<button type="button" class="btn ghost small" data-act="delmyfood">Удалить из моих блюд</button>' : '<button type="button" class="btn ghost small" data-act="hideprod">Скрыть из списка</button>'}
+      <button type="button" class="btn ghost small" data-act="editcancel">Отмена</button>`;
+    s.innerHTML = sheetFrame(title, body);
+    return;
+  }
   if (sheet.pick) {
     const p = sheet.pick, start = p.start || (p.base === 100 ? 100 : 1);
     body = `<h3>${esc(label(p))}</h3>
@@ -903,7 +957,7 @@ function renderSheet() {
       <p class="sub" id="xInfo"></p>
       <button type="button" class="btn small" data-act="addpicked">Добавить</button>
       <button type="button" class="btn ghost small" data-act="backpick">Другой продукт</button>
-      ${p.mine ? '<button type="button" class="btn ghost small" data-act="delmyfood">Убрать из моих блюд</button>' : ''}`;
+      ${p.ref || p.from ? '' : '<button type="button" class="btn ghost small" data-act="editprod">Изменить или скрыть</button>'}`;
     s.innerHTML = sheetFrame(title, body);
     pickInfo();
     return;
@@ -1312,7 +1366,7 @@ document.addEventListener('click', e => {
   if (act === 'pickextra') { sheet.pick = PRODUCTS[+el.dataset.i]; renderSheet(); return; }
   if (act === 'pickweb') { sheet.pick = sheet.web[+el.dataset.i]; renderSheet(); return; }
   if (act === 'websearch') { webSearch(); return; }
-  if (act === 'backpick') { sheet.pick = null; renderSheet(); return; }
+  if (act === 'backpick') { sheet.pick = null; sheet.editing = false; renderSheet(); return; }
   if (act === 'addpicked') {
     const a = Number($('xAmount').value) || 0;
     if (a <= 0) { toast('Впиши количество'); return; }
@@ -1340,6 +1394,40 @@ document.addEventListener('click', e => {
     render();
     return;
   }
+  if (act === 'editprod') { sheet.editing = true; renderSheet(); return; }
+  if (act === 'editcancel') { sheet.editing = false; renderSheet(); return; }
+  if (act === 'saveprod' || act === 'origprod' || act === 'hideprod') {
+    const p = sheet.pick, key = p.orig || p.n, edit = shared.prodEdit = shared.prodEdit || {};
+    const n = act === 'origprod' ? key : $('eName').value.trim().replace(/\s+/g, ' ');
+    if (!n) { toast('Впиши название'); return; }
+    if (act === 'hideprod') {
+      if (!confirm(`Скрыть «${p.n}» из списка продуктов? Вернуть можно внизу списка.`)) return;
+      edit[key] = { hidden: true };
+    } else if (p.mine) {
+      const v = readMacros();
+      if (!v.k) { toast('Впиши калории'); return; }
+      if (norm(n) !== norm(p.n) && PRODUCTS.some(x => norm(x.n) === norm(n))) { toast('Продукт с таким названием уже есть'); return; }
+      shared.myfoods = (shared.myfoods || []).map(x => (x.n === p.n ? { ...x, n, ...v } : x));
+    } else {
+      if (norm(n) !== norm(p.n) && PRODUCTS.some(x => x !== p && norm(x.n) === norm(n))) { toast('Продукт с таким названием уже есть'); return; }
+      if (n === key) delete edit[key]; else edit[key] = { n };
+    }
+    saveShared();
+    rebuildProducts();
+    sheet.editing = false;
+    sheet.pick = act === 'hideprod' ? null : PRODUCTS.find(x => x.n === n && !!x.mine === !!p.mine) || null;
+    renderSheet();
+    toast(act === 'hideprod' ? 'Скрыл из списка' : 'Сохранил');
+    return;
+  }
+  if (act === 'unhideprod') {
+    delete (shared.prodEdit || {})[el.dataset.n];
+    saveShared();
+    rebuildProducts();
+    renderSheet();
+    toast('Продукт вернулся в список');
+    return;
+  }
   if (act === 'delmyfood') {
     if (!confirm('Убрать это блюдо из списка? Уже добавленные записи останутся.')) return;
     const n = sheet.pick.n;
@@ -1347,6 +1435,7 @@ document.addEventListener('click', e => {
     saveShared();
     rebuildProducts();
     sheet.pick = null;
+    sheet.editing = false;
     renderSheet();
     return;
   }
@@ -1521,9 +1610,11 @@ $('tabGrams').addEventListener('click', () => { state.view = 'grams'; save(); re
 $('tabTrain').addEventListener('click', () => { state.view = 'train'; save(); render(); window.scrollTo(0, 0); });
 $('tabShop').addEventListener('click', () => { state.view = 'shop'; save(); render(); window.scrollTo(0, 0); });
 
+if (fixNames()) { save(); saveShared(); }
+
 // Cooked weight the user named for a new dish (g of cooked from 100 g raw), set once; after that the weights tab is his.
 (function seedYield() {
-  const SEED = { 'Голень куриная без кожи и кости': 65 }, KEY = 'pitanie:yseed';
+  const SEED = { 'Голень куриная без кожи и кости': 65, 'Котлета куриная домашняя': 85 }, KEY = 'pitanie:yseed';
   let done = [];
   try { done = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return; }
   const todo = Object.keys(SEED).filter(n => !done.includes(n));

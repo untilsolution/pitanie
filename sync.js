@@ -47,7 +47,7 @@ window.Sync = (() => {
     return {
       plan: PLAN.id, eaten: state.eaten, swaps: state.swaps, extras: state.extras,
       mydays: state.mydays, adds: state.adds, removed: state.removed, amt: state.amt, train: state.train, trainAdj: state.trainAdj, hidden: state.hidden,
-      yield: shared.yield, vessels: shared.vessels, myfoods: shared.myfoods || [], raw: shared.raw || {}, yieldAt: shared.yieldAt || {},
+      yield: shared.yield, vessels: shared.vessels, myfoods: shared.myfoods || [], raw: shared.raw || {}, yieldAt: shared.yieldAt || {}, prodEdit: shared.prodEdit || {},
       cookAdd: shared.cookAdd || [], cookHide: shared.cookHide || [], cookSeen: shared.cookSeen || [],
       days: [...PLAN.days.map((x, d) => d), ...state.mydays.map((x, j) => (x ? MY + j : -1)).filter(d => d >= 0)].map(d => ({ title: dayAt(d).title, text: marked(d) ? dayText(d) : null })),
     };
@@ -75,6 +75,7 @@ window.Sync = (() => {
     if (plain(data.yield)) shared.yield = data.yield;
     if (plain(data.raw)) shared.raw = data.raw;
     if (plain(data.yieldAt)) shared.yieldAt = data.yieldAt;
+    if (plain(data.prodEdit)) shared.prodEdit = data.prodEdit;
     if (Array.isArray(data.vessels)) {
       const jpeg = p => /^data:image\/jpeg;base64,[\w+/=]+$/.test(p || '');
       shared.vessels = data.vessels.map(v => ({ n: String(v.n), w: Number(v.w) || 0, ...(typeof v.cat === 'string' ? { cat: v.cat } : {}), ...(jpeg(v.photo) ? { photo: v.photo } : {}), ...(jpeg(v.big) ? { big: v.big } : {}) }));
@@ -82,8 +83,10 @@ window.Sync = (() => {
     if (Array.isArray(data.myfoods)) {
       const n = x => Number(x) || 0;
       shared.myfoods = data.myfoods.filter(p => p && p.n).map(p => ({ n: String(p.n), base: n(p.base) || 1, u: String(p.u || 'г'), p: n(p.p), f: n(p.f), c: n(p.c), k: n(p.k), start: n(p.start) || 1 }));
-      rebuildProducts();
     }
+    // Data from a phone that has not opened the new version yet may still carry old product names.
+    fixNames();
+    rebuildProducts();
     me.at = data.updated || me.at;
   }
 
