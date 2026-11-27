@@ -75,7 +75,21 @@ function dayAt(d) {
     meals: day.meals.map(meal => { const r = pairs.find(([a]) => a === meal.name); return r && !day.meals.some(x => x.name === r[1]) ? { ...meal, name: r[1] } : meal; }) };
 }
 const isTrain = d => isTrainTitle(dayAt(d).title);
-const dayIds = () => [...PLAN.days.map((x, d) => d).filter(d => d >= SHOW_FROM && !state.hidden[d]), ...(state.mydays || []).map((x, j) => (x ? MY + j : -1)).filter(d => d >= 0)];
+// Tabs go by calendar date, plan days and the user's own days mixed; 30, 31 November come before 1 December.
+const MONTH_NAMES = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const DATE_IN_TITLE = new RegExp(String.raw`(\d{1,2}) (` + MONTH_NAMES.join('|') + ')');
+function dayTime(d) {
+  const m = ((dayAt(d) || {}).title || '').match(DATE_IN_TITLE);
+  if (!m) return Infinity;
+  const now = new Date(), half = 182 * 864e5;
+  let dt = new Date(now.getFullYear(), MONTH_NAMES.indexOf(m[2]), +m[1]);
+  // A title has no year: take the one that puts the day nearest to today, so January follows December.
+  if (dt - now > half) dt = new Date(now.getFullYear() - 1, dt.getMonth(), dt.getDate());
+  else if (now - dt > half) dt = new Date(now.getFullYear() + 1, dt.getMonth(), dt.getDate());
+  return dt.getTime();
+}
+const dayIds = () => [...PLAN.days.map((x, d) => d).filter(d => d >= SHOW_FROM && !state.hidden[d]), ...(state.mydays || []).map((x, j) => (x ? MY + j : -1)).filter(d => d >= 0)]
+  .map((d, i) => ({ d, i, t: dayTime(d) })).sort((a, b) => a.t - b.t || a.i - b.i).map(x => x.d);
 // Dishes the user cooks now and then stay in the grams list even when the current days lack them.
 const COOK_KEEP = ['Макароны', 'Гречка', 'Индейка духовая Индилайт'];
 // Old long names of the same products (user, 2026-11-27: just «Рис», «Гречка», «Макароны»). Everything saved under an old name moves to the new one.
