@@ -53,7 +53,7 @@ function saveShared() {
   try { localStorage.setItem(SHARED, JSON.stringify(shared)); } catch (e) { /* the page still works for this visit */ }
   if (window.Sync) Sync.changed();
 }
-const COOK = /^(Пюре|Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлет|Лазанья|Картофель жареный|Голень)/;
+const COOK = /^(Пюре|Макароны|Рис|Гречка|Наггетсы|Рулетики|Фарш|Куриная грудка|Бёдра|Филе|Говядина|Курица|Индейка|Свинина|Рыба|Котлеты|Лазанья|Картофель жареный|Голень)/;
 // One-off food from outside is not cooked at home, so it never gets a weights card by itself.
 const NOT_COOKED = /«Вкусно и точка»|вялен|сушён|слабосол|копчён/i;
 const DRY = /^(Макароны|Рис|Гречка|Крупа|Овсян)/;
@@ -1611,10 +1611,19 @@ $('tabTrain').addEventListener('click', () => { state.view = 'train'; save(); re
 $('tabShop').addEventListener('click', () => { state.view = 'shop'; save(); render(); window.scrollTo(0, 0); });
 
 if (fixNames()) { save(); saveShared(); }
+// Chicken cutlets are eaten whole, by the piece, so they have no weights card (user, 2026-11-27).
+(function dropCutletCard() {
+  const n = 'Котлета куриная домашняя', KEY = 'pitanie:nocutlet';
+  try { if (localStorage.getItem(KEY)) return; localStorage.setItem(KEY, '1'); } catch (e) { return; }
+  shared.cookSeen = (shared.cookSeen || []).filter(x => x !== n);
+  if (shared.yield) delete shared.yield[n];
+  if (shared.yieldAt) delete shared.yieldAt[n];
+  saveShared();
+})();
 
 // Cooked weight the user named for a new dish (g of cooked from 100 g raw), set once; after that the weights tab is his.
 (function seedYield() {
-  const SEED = { 'Голень куриная без кожи и кости': 65, 'Котлета куриная домашняя': 85 }, KEY = 'pitanie:yseed';
+  const SEED = { 'Голень куриная без кожи и кости': 65 }, KEY = 'pitanie:yseed';
   let done = [];
   try { done = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return; }
   const todo = Object.keys(SEED).filter(n => !done.includes(n));
